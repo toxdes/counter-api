@@ -1,0 +1,34 @@
+# Binaries
+counter
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Environment
+.env
+
+# Build artifacts
+*.o
+*.a
+
+# Test files
+*.test
+
+# Output
+logs/
+*.log
+
+# Go workspace file
+go.work
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
