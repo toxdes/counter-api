@@ -116,10 +116,22 @@ func setupTestDB(t *testing.T) *database.DB {
 		)
 	`)
 
+	db.Exec(`
+		CREATE TABLE IF NOT EXISTS counters (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			label TEXT NOT NULL,
+			value BIGINT NOT NULL DEFAULT 0,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`)
+
 	return db
 }
 
 func cleanupTestDB(t *testing.T, db *database.DB) {
+	db.Exec("DROP TABLE IF EXISTS counters")
 	db.Exec("DROP TABLE IF EXISTS tenants")
 }
 
