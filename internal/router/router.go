@@ -21,23 +21,18 @@ type Router struct {
 // CORSMiddleware applies CORS headers to the request
 // Returns true if the request was fully handled by CORS (e.g., preflight OPTIONS), false if chain should continue
 func CORSMiddleware(c *routing.Context, corsConfig *middleware.CORSConfig) bool {
-	// Apply CORS middleware
-	wasHandled := false
+	// Track whether the next handler is called
+	// If called, CORS didn't handle the request (non-OPTIONS)
+	// If not called, CORS handled it (preflight OPTIONS)
+	handledByCORS := true
+
 	corsHandler := middleware.CORS(corsConfig)(func(ctx *fasthttp.RequestCtx) {
-		// Only called if not a preflight OPTIONS request
-		wasHandled = false
+		// This closure is only called for non-OPTIONS requests
+		handledByCORS = false
 	})
 	corsHandler(c.RequestCtx)
 
-	// Check if this was a preflight OPTIONS request that CORS handled
-	if string(c.RequestCtx.Method()) == "OPTIONS" {
-		// CORS middleware sets the status and returns early for OPTIONS
-		// We need to ensure the status is set and signal that we handled it
-		c.RequestCtx.SetStatusCode(fasthttp.StatusOK)
-		return true
-	}
-
-	return false
+	return handledByCORS
 }
 
 // LoggingMiddleware applies request logging
