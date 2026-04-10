@@ -1,0 +1,6 @@
+name: prod
+variables:
+  - secret: true
+    name: API_KEY
+  - name: BASE_URL
+    value: https://counter-api.toxdes.com
