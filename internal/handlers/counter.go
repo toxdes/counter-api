@@ -12,6 +12,10 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+const (
+	ErrorCodeDeltaExceedsMaximum = "DELTA_EXCEEDS_MAXIMUM"
+)
+
 // CreateCounterHandler handles counter creation requests
 func CreateCounterHandler(db *database.DB) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
@@ -141,7 +145,7 @@ func IncrementCounterHandler(db *database.DB) fasthttp.RequestHandler {
 
 		// Validate delta doesn't exceed max_delta
 		if delta > counterData.MaxDelta {
-			respondWithError(ctx, fasthttp.StatusBadRequest, "DELTA_EXCEEDS_MAXIMUM", "Delta exceeds maximum allowed value")
+			respondWithError(ctx, fasthttp.StatusBadRequest, ErrorCodeDeltaExceedsMaximum, "Delta exceeds maximum allowed value")
 			return
 		}
 
