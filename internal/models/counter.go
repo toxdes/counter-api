@@ -40,6 +40,7 @@ func (c *Counter) Validate() error {
 type CreateCounterRequest struct {
 	Label        string `json:"label"`
 	InitialValue int64  `json:"initial_value"`
+	MaxDelta     int64  `json:"max_delta"`
 }
 
 // Validate validates the create counter request
@@ -56,6 +57,16 @@ func (r *CreateCounterRequest) Validate() error {
 	// Validate initial value
 	if err := utils.ValidateCounterValue(r.InitialValue); err != nil {
 		return err
+	}
+
+	// Default MaxDelta to 50 if not provided or zero
+	if r.MaxDelta == 0 {
+		r.MaxDelta = 50
+	}
+
+	// Validate max_delta is at least 1
+	if r.MaxDelta < 1 {
+		return errors.New("max_delta must be at least 1")
 	}
 
 	return nil
