@@ -125,6 +125,26 @@ func IncrementCounterHandler(db *database.DB) fasthttp.RequestHandler {
 			return
 		}
 
+		// Fetch counter with max_delta to validate
+		var counterData struct {
+			MaxDelta int64 `db:"max_delta"`
+		}
+		err = db.Get(
+			&counterData,
+			"SELECT max_delta FROM counters WHERE id = $1 AND tenant_id = $2",
+			counterID, tenantID,
+		)
+		if err != nil {
+			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
+			return
+		}
+
+		// Validate delta doesn't exceed max_delta
+		if delta > counterData.MaxDelta {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "DELTA_EXCEEDS_MAXIMUM", "Delta exceeds maximum allowed value")
+			return
+		}
+
 		// Increment counter and get new value
 		now := time.Now().UTC()
 		var newValue int64

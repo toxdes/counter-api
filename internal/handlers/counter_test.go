@@ -151,6 +151,18 @@ func createTestCounter(t *testing.T, db *database.DB, tenantID, label string, va
 	return id
 }
 
+func createTestCounterWithMaxDelta(t *testing.T, db *database.DB, tenantID, label string, value, maxDelta int64) string {
+	var id string
+	err := db.QueryRow(
+		"INSERT INTO counters (tenant_id, label, value, max_delta) VALUES ($1, $2, $3, $4) RETURNING id",
+		tenantID, label, value, maxDelta,
+	).Scan(&id)
+	if err != nil {
+		t.Fatalf("Failed to create test counter: %v", err)
+	}
+	return id
+}
+
 func TestCreateCounterWithMaxDelta(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
@@ -205,5 +217,76 @@ func TestCreateCounterWithMaxDelta(t *testing.T) {
 
 	if resp2.MaxDelta != 50 {
 		t.Errorf("Expected MaxDelta 50 (default), got %d", resp2.MaxDelta)
+	}
+}
+
+func TestIncrementCounterExceedsMaxDelta(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestDB(t, db)
+
+	tenantID := createTestTenant(t, db, "blog")
+	counterID := createTestCounterWithMaxDelta(t, db, tenantID, "likes", 0, 10)
+
+	handler := IncrementCounterHandler(db)
+
+	// Try to increment with delta=20 (exceeds max_delta=10)
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=20")
+	ctx.Request.Header.SetMethod("POST")
+	ctx.SetUserValue("tenant_id", tenantID)
+	ctx.SetUserValue("counter_id", counterID)
+
+	handler(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d: %s", ctx.Response.StatusCode(), ctx.Response.Body())
+	}
+
+	// Verify error response
+	var resp map[string][]map[string]string
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal error response: %v", err)
+	}
+
+	if len(resp["errors"]) != 1 {
+		t.Errorf("Expected 1 error, got %d", len(resp["errors"]))
+	}
+
+	if resp["errors"][0]["code"] != "DELTA_EXCEEDS_MAXIMUM" {
+		t.Errorf("Expected error code 'DELTA_EXCEEDS_MAXIMUM', got '%s'", resp["errors"][0]["code"])
+	}
+}
+
+func TestIncrementCounterWithinMaxDelta(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestDB(t, db)
+
+	tenantID := createTestTenant(t, db, "blog")
+	counterID := createTestCounterWithMaxDelta(t, db, tenantID, "likes", 0, 10)
+
+	handler := IncrementCounterHandler(db)
+
+	// Increment with delta=5 (within max_delta=10)
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=5")
+	ctx.Request.Header.SetMethod("POST")
+	ctx.SetUserValue("tenant_id", tenantID)
+	ctx.SetUserValue("counter_id", counterID)
+
+	handler(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", ctx.Response.StatusCode(), ctx.Response.Body())
+	}
+
+	var resp models.IncrementResponse
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if resp.Value != 5 {
+		t.Errorf("Expected value 5, got %d", resp.Value)
 	}
 }
