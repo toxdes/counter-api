@@ -85,9 +85,16 @@ Content-Type: application/json
 
 {
   "label": "post_likes",
-  "initial_value": 0
+  "initial_value": 0,
+  "max_delta": 100
 }
 ```
+
+**Parameters**
+
+- `label` (string, optional): Counter label for identification
+- `initial_value` (integer, optional): Starting value for the counter, defaults to 0
+- `max_delta` (integer, optional): Maximum increment allowed per request, defaults to 50, must be >= 1
 
 **Response**
 
@@ -100,6 +107,7 @@ Content-Type: application/json
   "tenant_id": "01912345-6789-7000-8000-000000000001",
   "label": "post_likes",
   "value": 0,
+  "max_delta": 100,
   "created_at": "2026-04-07T12:00:00Z",
   "updated_at": "2026-04-07T12:00:00Z"
 }
@@ -152,6 +160,7 @@ Content-Type: application/json
   "tenant_id": "01912345-6789-7000-8000-000000000001",
   "label": "post_likes",
   "value": 42,
+  "max_delta": 100,
   "created_at": "2026-04-07T12:00:00Z",
   "updated_at": "2026-04-07T12:01:00Z"
 }
@@ -168,7 +177,25 @@ POST /tenants/{tenant_id}/{counter_id}/inc?delta=5
 ```
 
 Query parameters:
-- `delta` (optional): Positive integer to increment by. Defaults to `1`.
+- `delta` (optional): Positive integer to increment by. Defaults to `1`. Must not exceed the counter's `max_delta` value.
+
+**Validation**
+
+If `delta` exceeds the counter's `max_delta` value:
+
+```http
+400 Bad Request
+Content-Type: application/json
+
+{
+  "errors": [
+    {
+      "code": "DELTA_EXCEEDS_MAXIMUM",
+      "message": "Delta exceeds maximum allowed value"
+    }
+  ]
+}
+```
 
 **Response**
 
@@ -222,6 +249,7 @@ Content-Type: application/json
 | `INVALID_PARAMETER` | Invalid query or path parameter |
 | `INVALID_DELTA` | Delta must be a positive integer |
 | `INVALID_VALUE` | Value must be an integer |
+| `DELTA_EXCEEDS_MAXIMUM` | Increment delta exceeds the counter's max_delta value |
 
 ## Rate Limiting
 
