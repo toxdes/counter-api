@@ -3,6 +3,7 @@ package handlers
 import (
 	"counter/internal/database"
 	"counter/internal/models"
+	"counter/internal/utils"
 	"encoding/json"
 	"strconv"
 	"time"
@@ -15,6 +16,12 @@ import (
 func CreateCounterHandler(db *database.DB) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		tenantID := ctx.UserValue("tenant_id").(string)
+
+		// Validate UUID format
+		if err := utils.ValidateUUID(tenantID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid tenant ID format")
+			return
+		}
 
 		// Verify tenant exists
 		var tenantExists bool
@@ -35,13 +42,25 @@ func CreateCounterHandler(db *database.DB) fasthttp.RequestHandler {
 			return
 		}
 
+		// Check if label already exists for this tenant
+		var labelExists bool
+		err = db.Get(&labelExists, "SELECT EXISTS(SELECT 1 FROM counters WHERE tenant_id = $1 AND label = $2)", tenantID, req.Label)
+		if err != nil {
+			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
+			return
+		}
+		if labelExists {
+			respondWithError(ctx, fasthttp.StatusConflict, "COUNTER_LABEL_EXISTS", "A counter with this label already exists for this tenant")
+			return
+		}
+
 		// Create counter
 		counterID := uuid.New().String()
 		now := time.Now().UTC()
 
 		_, err = db.Exec(
-			"INSERT INTO counters (id, tenant_id, label, value, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
-			counterID, tenantID, req.Label, req.InitialValue, now, now,
+			"INSERT INTO counters (id, tenant_id, label, value, max_delta, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+			counterID, tenantID, req.Label, req.InitialValue, req.MaxDelta, now, now,
 		)
 		if err != nil {
 			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to create counter")
@@ -53,6 +72,7 @@ func CreateCounterHandler(db *database.DB) fasthttp.RequestHandler {
 			TenantID:  tenantID,
 			Label:     req.Label,
 			Value:     req.InitialValue,
+			MaxDelta:  req.MaxDelta,
 			CreatedAt: now,
 			UpdatedAt: now,
 		}
@@ -64,8 +84,27 @@ func CreateCounterHandler(db *database.DB) fasthttp.RequestHandler {
 // IncrementCounterHandler handles counter increment requests
 func IncrementCounterHandler(db *database.DB) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		tenantID := ctx.UserValue("tenant_id").(string)
-		counterID := ctx.UserValue("counter_id").(string)
+		tenantID, ok := ctx.UserValue("tenant_id").(string)
+		if !ok || tenantID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "tenant_id is required")
+			return
+		}
+
+		counterID, ok := ctx.UserValue("counter_id").(string)
+		if !ok || counterID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "counter_id is required")
+			return
+		}
+
+		// Validate UUID formats
+		if err := utils.ValidateUUID(tenantID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid tenant ID format")
+			return
+		}
+		if err := utils.ValidateUUID(counterID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid counter ID format")
+			return
+		}
 
 		// Parse delta from query params
 		delta := int64(1) // default
@@ -111,25 +150,49 @@ func IncrementCounterHandler(db *database.DB) fasthttp.RequestHandler {
 // SetCounterValueHandler handles counter value set requests
 func SetCounterValueHandler(db *database.DB) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		tenantID := ctx.UserValue("tenant_id").(string)
-		counterID := ctx.UserValue("counter_id").(string)
-
-		// Parse value from query params
-		valueStr := string(ctx.QueryArgs().Peek("val"))
-		if valueStr == "" {
-			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "Value parameter is required")
+		tenantID, ok := ctx.UserValue("tenant_id").(string)
+		if !ok || tenantID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "tenant_id is required")
 			return
 		}
 
-		value, err := strconv.ParseInt(valueStr, 10, 64)
-		if err != nil {
-			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_VALUE", "Value must be an integer")
+		counterID, ok := ctx.UserValue("counter_id").(string)
+		if !ok || counterID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "counter_id is required")
+			return
+		}
+
+		// Validate UUID formats
+		if err := utils.ValidateUUID(tenantID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid tenant ID format")
+			return
+		}
+		if err := utils.ValidateUUID(counterID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid counter ID format")
+			return
+		}
+
+		var req models.SetCounterValueRequest
+		if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_JSON", "Invalid JSON")
+			return
+		}
+
+		// Validate request after unmarshaling
+		if err := req.Validate(); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", err.Error())
+			return
+		}
+
+		// Double-check value is not nil (should be caught by Validate)
+		if req.Value == nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "value is required")
 			return
 		}
 
 		// Verify counter exists and belongs to tenant
 		var exists bool
-		err = db.Get(&exists, "SELECT EXISTS(SELECT 1 FROM counters WHERE id = $1 AND tenant_id = $2)", counterID, tenantID)
+		err := db.Get(&exists, "SELECT EXISTS(SELECT 1 FROM counters WHERE id = $1 AND tenant_id = $2)", counterID, tenantID)
 		if err != nil || !exists {
 			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
 			return
@@ -139,7 +202,7 @@ func SetCounterValueHandler(db *database.DB) fasthttp.RequestHandler {
 		now := time.Now().UTC()
 		_, err = db.Exec(
 			"UPDATE counters SET value = $1, updated_at = $2 WHERE id = $3",
-			value, now, counterID,
+			*req.Value, now, counterID,
 		)
 		if err != nil {
 			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to set counter value")
@@ -148,7 +211,7 @@ func SetCounterValueHandler(db *database.DB) fasthttp.RequestHandler {
 
 		resp := &models.SetValueResponse{
 			CounterID: counterID,
-			Value:     value,
+			Value:     *req.Value,
 			UpdatedAt: now,
 		}
 
@@ -159,8 +222,27 @@ func SetCounterValueHandler(db *database.DB) fasthttp.RequestHandler {
 // GetCounterHandler handles counter retrieval requests
 func GetCounterHandler(db *database.DB) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		tenantID := ctx.UserValue("tenant_id").(string)
-		counterID := ctx.UserValue("counter_id").(string)
+		tenantID, ok := ctx.UserValue("tenant_id").(string)
+		if !ok || tenantID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "tenant_id is required")
+			return
+		}
+
+		counterID, ok := ctx.UserValue("counter_id").(string)
+		if !ok || counterID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "counter_id is required")
+			return
+		}
+
+		// Validate UUID formats
+		if err := utils.ValidateUUID(tenantID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid tenant ID format")
+			return
+		}
+		if err := utils.ValidateUUID(counterID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid counter ID format")
+			return
+		}
 
 		var counter models.Counter
 		err := db.Get(
