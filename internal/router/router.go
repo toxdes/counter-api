@@ -125,6 +125,14 @@ func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *
 	router.Post("/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(handlers.IncrementCounterHandler(db)))
 	router.Post("/tenants/<tenant_id>/counters/<counter_id>/set", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.SetCounterValueHandler(db))))
 
+	// OPTIONS catch-all handler for CORS preflight requests
+	// Must be before NotFound handler to intercept unmatched OPTIONS requests
+	router.Options("/*", func(c *routing.Context) error {
+		// CORS headers already set by middleware, just return 200 OK
+		c.RequestCtx.SetStatusCode(fasthttp.StatusOK)
+		return nil
+	})
+
 	// Custom 404 handler
 	router.NotFound(func(c *routing.Context) error {
 		c.RequestCtx.SetStatusCode(fasthttp.StatusNotFound)
@@ -229,7 +237,7 @@ func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsCo
 			return nil
 		}
 
-		// Continue to next handler
+		// Continue to next middleware
 		return c.Next()
 	})
 
@@ -259,6 +267,14 @@ func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsCo
 	router.Get("/tenants/<tenant_id>/counters/<counter_id>", toHandler(handlers.CachedGetCounterHandler(cachedCounter)))
 	router.Post("/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(handlers.CachedIncrementCounterHandler(cachedCounter)))
 	router.Post("/tenants/<tenant_id>/counters/<counter_id>/set", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CachedSetCounterValueHandler(cachedCounter))))
+
+	// OPTIONS catch-all handler for CORS preflight requests
+	// Must be before NotFound handler to intercept unmatched OPTIONS requests
+	router.Options("/*", func(c *routing.Context) error {
+		// CORS headers already set by middleware, just return 200 OK
+		c.RequestCtx.SetStatusCode(fasthttp.StatusOK)
+		return nil
+	})
 
 	// Custom 404 handler
 	router.NotFound(func(c *routing.Context) error {
