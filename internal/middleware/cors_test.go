@@ -6,33 +6,33 @@ import (
 
 func TestOriginMatches(t *testing.T) {
 	tests := []struct {
-		name       string
-		origin     string
-		allowed    string
+		name        string
+		origin      string
+		allowed     string
 		shouldMatch bool
 	}{
 		{
-			name:       "exact match",
-			origin:     "https://example.com",
-			allowed:    "https://example.com",
+			name:        "exact match",
+			origin:      "https://example.com",
+			allowed:     "https://example.com",
 			shouldMatch: true,
 		},
 		{
-			name:       "wildcard subdomain match",
-			origin:     "https://sub.example.com",
-			allowed:    "https://*.example.com",
+			name:        "wildcard subdomain match",
+			origin:      "https://sub.example.com",
+			allowed:     "https://*.example.com",
 			shouldMatch: true,
 		},
 		{
-			name:       "wildcard all match",
-			origin:     "https://anything.com",
-			allowed:    "*",
+			name:        "wildcard all match",
+			origin:      "https://anything.com",
+			allowed:     "*",
 			shouldMatch: true,
 		},
 		{
-			name:       "no match",
-			origin:     "https://evil.com",
-			allowed:    "https://example.com",
+			name:        "no match",
+			origin:      "https://evil.com",
+			allowed:     "https://example.com",
 			shouldMatch: false,
 		},
 	}

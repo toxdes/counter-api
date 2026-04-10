@@ -13,23 +13,23 @@ func TestAPIKeyAuth(t *testing.T) {
 	})
 
 	tests := []struct {
-		name       string
-		apiKey     string
+		name           string
+		apiKey         string
 		expectedStatus int
 	}{
 		{
-			name:       "valid API key",
-			apiKey:     "test-api-key",
+			name:           "valid API key",
+			apiKey:         "test-api-key",
 			expectedStatus: fasthttp.StatusOK,
 		},
 		{
-			name:       "missing API key",
-			apiKey:     "",
+			name:           "missing API key",
+			apiKey:         "",
 			expectedStatus: fasthttp.StatusUnauthorized,
 		},
 		{
-			name:       "invalid API key",
-			apiKey:     "wrong-key",
+			name:           "invalid API key",
+			apiKey:         "wrong-key",
 			expectedStatus: fasthttp.StatusUnauthorized,
 		},
 	}
