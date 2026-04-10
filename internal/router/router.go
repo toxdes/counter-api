@@ -19,17 +19,25 @@ type Router struct {
 }
 
 // CORSMiddleware applies CORS headers to the request
-func CORSMiddleware(c *routing.Context, corsConfig *middleware.CORSConfig) {
+// Returns true if the request was fully handled by CORS (e.g., preflight OPTIONS), false if chain should continue
+func CORSMiddleware(c *routing.Context, corsConfig *middleware.CORSConfig) bool {
 	// Apply CORS middleware
+	wasHandled := false
 	corsHandler := middleware.CORS(corsConfig)(func(ctx *fasthttp.RequestCtx) {
-		// Continue to next handler
+		// Only called if not a preflight OPTIONS request
+		wasHandled = false
 	})
 	corsHandler(c.RequestCtx)
 
-	// Don't continue if this was a preflight OPTIONS request (CORS middleware handled it)
+	// Check if this was a preflight OPTIONS request that CORS handled
 	if string(c.RequestCtx.Method()) == "OPTIONS" {
+		// CORS middleware sets the status and returns early for OPTIONS
+		// We need to ensure the status is set and signal that we handled it
 		c.RequestCtx.SetStatusCode(fasthttp.StatusOK)
+		return true
 	}
+
+	return false
 }
 
 // LoggingMiddleware applies request logging
@@ -98,10 +106,9 @@ func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *
 	})
 
 	router.Use(func(c *routing.Context) error {
-		CORSMiddleware(c, corsConfig)
-		// Don't continue if this was a preflight OPTIONS request (CORS middleware handled it)
-		if string(c.RequestCtx.Method()) == "OPTIONS" {
-			return nil
+		handled := CORSMiddleware(c, corsConfig)
+		if handled {
+			return nil // CORS handled this request (e.g., preflight OPTIONS)
 		}
 		return c.Next()
 	})
@@ -233,7 +240,10 @@ func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsCo
 
 	// Apply CORS middleware
 	router.Use(func(c *routing.Context) error {
-		CORSMiddleware(c, corsConfig)
+		handled := CORSMiddleware(c, corsConfig)
+		if handled {
+			return nil // CORS handled this request (e.g., preflight OPTIONS)
+		}
 		return c.Next()
 	})
 
