@@ -290,3 +290,39 @@ func TestIncrementCounterWithinMaxDelta(t *testing.T) {
 		t.Errorf("Expected value 5, got %d", resp.Value)
 	}
 }
+
+func TestGetCounterIncludesMaxDelta(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestDB(t, db)
+
+	tenantID := createTestTenant(t, db, "blog")
+	counterID := createTestCounterWithMaxDelta(t, db, tenantID, "likes", 42, 100)
+
+	handler := GetCounterHandler(db)
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID)
+	ctx.Request.Header.SetMethod("GET")
+	ctx.SetUserValue("tenant_id", tenantID)
+	ctx.SetUserValue("counter_id", counterID)
+
+	handler(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", ctx.Response.StatusCode(), ctx.Response.Body())
+	}
+
+	var resp models.Counter
+	if err := json.Unmarshal(ctx.Response.Body(), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if resp.Value != 42 {
+		t.Errorf("Expected value 42, got %d", resp.Value)
+	}
+
+	if resp.MaxDelta != 100 {
+		t.Errorf("Expected MaxDelta 100, got %d", resp.MaxDelta)
+	}
+}

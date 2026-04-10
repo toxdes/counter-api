@@ -267,7 +267,7 @@ func GetCounterHandler(db *database.DB) fasthttp.RequestHandler {
 		var counter models.Counter
 		err := db.Get(
 			&counter,
-			"SELECT id, tenant_id, label, value, created_at, updated_at FROM counters WHERE id = $1 AND tenant_id = $2",
+			"SELECT id, tenant_id, label, value, max_delta, created_at, updated_at FROM counters WHERE id = $1 AND tenant_id = $2",
 			counterID, tenantID,
 		)
 		if err != nil {
