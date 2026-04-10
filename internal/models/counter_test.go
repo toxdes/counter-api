@@ -96,3 +96,21 @@ func TestIncrementResponse(t *testing.T) {
 		t.Errorf("Expected value 42, got %d", resp.Value)
 	}
 }
+
+func TestCounterWithMaxDelta(t *testing.T) {
+	counter := &Counter{
+		TenantID: "123e4567-e89b-12d3-a456-426614174000",
+		Label:    "likes",
+		Value:    0,
+		MaxDelta: 100,
+	}
+
+	err := counter.Validate()
+	if err != nil {
+		t.Errorf("Validate() error = %v", err)
+	}
+
+	if counter.MaxDelta != 100 {
+		t.Errorf("Expected MaxDelta 100, got %d", counter.MaxDelta)
+	}
+}

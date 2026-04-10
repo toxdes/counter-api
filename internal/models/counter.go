@@ -1,6 +1,7 @@
 package models
 
 import (
+	"counter/internal/utils"
 	"errors"
 	"time"
 )
@@ -11,6 +12,7 @@ type Counter struct {
 	TenantID  string    `json:"tenant_id" db:"tenant_id"`
 	Label     string    `json:"label" db:"label"`
 	Value     int64     `json:"value" db:"value"`
+	MaxDelta  int64     `json:"max_delta" db:"max_delta"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
@@ -23,6 +25,14 @@ func (c *Counter) Validate() error {
 	if c.TenantID == "" {
 		return errors.New("tenant_id is required")
 	}
+	if c.Label != "" {
+		if err := utils.ValidateLabel(c.Label); err != nil {
+			return err
+		}
+	}
+	if err := utils.ValidateCounterValue(c.Value); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -34,7 +44,20 @@ type CreateCounterRequest struct {
 
 // Validate validates the create counter request
 func (r *CreateCounterRequest) Validate() error {
-	// Label is optional
+	// Sanitize and validate label if provided
+	if r.Label != "" {
+		sanitized, err := utils.SanitizeLabel(r.Label)
+		if err != nil {
+			return err
+		}
+		r.Label = sanitized
+	}
+
+	// Validate initial value
+	if err := utils.ValidateCounterValue(r.InitialValue); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -50,4 +73,23 @@ type SetValueResponse struct {
 	CounterID string    `json:"counter_id"`
 	Value     int64     `json:"value"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// SetCounterValueRequest represents a request to set a counter value
+type SetCounterValueRequest struct {
+	Value *int64 `json:"value"`
+}
+
+// Validate validates the set counter value request
+func (r *SetCounterValueRequest) Validate() error {
+	if r.Value == nil {
+		return errors.New("value is required")
+	}
+
+	// Validate the value is within safe bounds
+	if err := utils.ValidateCounterValue(*r.Value); err != nil {
+		return err
+	}
+
+	return nil
 }
