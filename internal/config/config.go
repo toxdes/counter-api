@@ -35,6 +35,14 @@ type Config struct {
 
 	// Logging
 	LogLevel string
+
+	// Cache
+	CacheEnabled      bool
+	CacheSize         int
+	CacheTTLSeconds   int
+	CacheWorkers      int
+	CacheQueueSize    int
+	CacheShutdownWait int
 }
 
 // Load loads configuration from environment variables with sensible defaults
@@ -61,6 +69,13 @@ func Load() (*Config, error) {
 		CORSMaxAge:           getEnvInt("CORS_MAX_AGE", 3600),
 
 		LogLevel: getEnv("LOG_LEVEL", "info"),
+
+		CacheEnabled:      getEnvBool("CACHE_ENABLED", true),
+		CacheSize:         getEnvInt("CACHE_SIZE", 1000),
+		CacheTTLSeconds:   getEnvInt("CACHE_TTL_SECONDS", 300),
+		CacheWorkers:      getEnvInt("CACHE_WORKERS", 2),
+		CacheQueueSize:    getEnvInt("CACHE_QUEUE_SIZE", 10000),
+		CacheShutdownWait: getEnvInt("CACHE_SHUTDOWN_WAIT", 5),
 	}
 
 	// Validate required fields
@@ -72,6 +87,22 @@ func Load() (*Config, error) {
 	}
 	if cfg.RateLimitGetMultiplier < 1 {
 		return nil, fmt.Errorf("RATE_LIMIT_GET_MULTIPLIER must be at least 1")
+	}
+
+	// Validate cache configuration
+	if cfg.CacheEnabled {
+		if cfg.CacheSize < 1 {
+			return nil, fmt.Errorf("CACHE_SIZE must be at least 1")
+		}
+		if cfg.CacheTTLSeconds < 0 {
+			return nil, fmt.Errorf("CACHE_TTL_SECONDS cannot be negative")
+		}
+		if cfg.CacheWorkers < 1 {
+			return nil, fmt.Errorf("CACHE_WORKERS must be at least 1")
+		}
+		if cfg.CacheQueueSize < 1 {
+			return nil, fmt.Errorf("CACHE_QUEUE_SIZE must be at least 1")
+		}
 	}
 
 	return cfg, nil

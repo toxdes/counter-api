@@ -1,11 +1,14 @@
 package main
 
 import (
+	"counter/internal/cache"
 	"counter/internal/config"
 	"counter/internal/database"
 	"counter/internal/middleware"
 	"counter/internal/migrations"
+	"counter/internal/models"
 	"counter/internal/router"
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -103,8 +106,77 @@ func main() {
 		}
 	}()
 
+	// Initialize cache if enabled
+	var cachedCounter *cache.CachedCounter
+	ctx := context.Background()
+
+		// Helper function to find last index of a byte in a string
+		indexLast := func(s string, sep byte) int {
+			for i := len(s) - 1; i >= 0; i-- {
+				if s[i] == sep {
+					return i
+				}
+			}
+			return -1
+		}
+
+	if cfg.CacheEnabled {
+		log.Printf("Initializing cache (size=%d, workers=%d, queue=%d, ttl=%ds)",
+			cfg.CacheSize, cfg.CacheWorkers, cfg.CacheQueueSize, cfg.CacheTTLSeconds)
+
+		// Create LRU cache
+		lruCache := cache.NewLRUCache(cfg.CacheSize)
+
+		// Create fetch function for cache misses
+		fetchFunc := func(key string) (*models.Counter, error) {
+			// Parse key format: tenant_id:counter_id
+			var tenantID, counterID string
+			if idx := indexLast(key, ':'); idx != -1 {
+				tenantID = key[:idx]
+				counterID = key[idx+1:]
+			} else {
+				return nil, fmt.Errorf("invalid cache key format")
+			}
+
+			// Fetch from database
+			var counter models.Counter
+			err := db.Get(
+				&counter,
+				"SELECT id, tenant_id, label, value, max_delta, created_at, updated_at FROM counters WHERE id = $1 AND tenant_id = $2",
+				counterID, tenantID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return &counter, nil
+		}
+
+		// Create write function for async writes
+		writeFunc := func(counterID string, delta int64) error {
+			// Async write to database
+			_, err := db.Exec(
+				"UPDATE counters SET value = value + $1, updated_at = NOW() WHERE id = $2",
+				delta, counterID,
+			)
+			return err
+		}
+
+		// Create cached counter instance
+		cachedCounter = cache.NewCachedCounter(lruCache, fetchFunc, writeFunc, cfg.CacheWorkers, cfg.CacheQueueSize)
+		cachedCounter.Start(ctx)
+
+		log.Printf("Cache initialized and started")
+	}
+
 	// Create router
-	r := router.NewRouter(db, corsConfig, rateLimiter, cfg.APIKey, logger)
+	var r *router.Router
+	if cfg.CacheEnabled && cachedCounter != nil {
+		r = router.NewCachedRouter(db, cachedCounter, corsConfig, rateLimiter, cfg.APIKey, logger)
+	} else {
+		r = router.NewRouter(db, corsConfig, rateLimiter, cfg.APIKey, logger)
+	}
+
+	// Helper function to find last index of a byte in a string
 
 	// Configure server
 	server := &fasthttp.Server{
@@ -130,6 +202,13 @@ func main() {
 	<-sigChan
 
 	log.Println("Shutting down server...")
+
+	// Shutdown cache first to drain pending writes
+	if cfg.CacheEnabled && cachedCounter != nil {
+		log.Printf("Shutting down cache (waiting up to %d seconds)...", cfg.CacheShutdownWait)
+		cachedCounter.Shutdown()
+		log.Printf("Cache shutdown complete")
+	}
 
 	// Stop cleanup goroutine
 	close(stopCleanup)

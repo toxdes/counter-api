@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"counter/internal/cache"
 	"counter/internal/database"
 	"counter/internal/models"
 	"counter/internal/utils"
@@ -280,5 +281,169 @@ func GetCounterHandler(db *database.DB) fasthttp.RequestHandler {
 		}
 
 		respondWithJSON(ctx, fasthttp.StatusOK, &counter)
+	}
+}
+
+// CachedGetCounterHandler handles counter retrieval requests with caching
+func CachedGetCounterHandler(cachedCounter *cache.CachedCounter) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		tenantID, ok := ctx.UserValue("tenant_id").(string)
+		if !ok || tenantID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "tenant_id is required")
+			return
+		}
+
+		counterID, ok := ctx.UserValue("counter_id").(string)
+		if !ok || counterID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "counter_id is required")
+			return
+		}
+
+		// Validate UUID formats
+		if err := utils.ValidateUUID(tenantID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid tenant ID format")
+			return
+		}
+		if err := utils.ValidateUUID(counterID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid counter ID format")
+			return
+		}
+
+		// Try to get from cache
+		counter, err := cachedCounter.Get(tenantID, counterID)
+		if err != nil {
+			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
+			return
+		}
+
+		respondWithJSON(ctx, fasthttp.StatusOK, counter)
+	}
+}
+
+// CachedIncrementCounterHandler handles counter increment requests with caching
+func CachedIncrementCounterHandler(cachedCounter *cache.CachedCounter) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		tenantID, ok := ctx.UserValue("tenant_id").(string)
+		if !ok || tenantID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "tenant_id is required")
+			return
+		}
+
+		counterID, ok := ctx.UserValue("counter_id").(string)
+		if !ok || counterID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "counter_id is required")
+			return
+		}
+
+		// Validate UUID formats
+		if err := utils.ValidateUUID(tenantID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid tenant ID format")
+			return
+		}
+		if err := utils.ValidateUUID(counterID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid counter ID format")
+			return
+		}
+
+		// Parse delta from query params
+		delta := int64(1) // default
+		if deltaStr := string(ctx.QueryArgs().Peek("delta")); deltaStr != "" {
+			parsed, err := strconv.ParseInt(deltaStr, 10, 64)
+			if err != nil || parsed <= 0 {
+				respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_DELTA", "Delta must be a positive integer")
+				return
+			}
+			delta = parsed
+		}
+
+		// Get counter first to validate max_delta
+		counter, err := cachedCounter.Get(tenantID, counterID)
+		if err != nil {
+			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
+			return
+		}
+
+		// Validate delta doesn't exceed max_delta
+		if delta > counter.MaxDelta {
+			respondWithError(ctx, fasthttp.StatusBadRequest, ErrorCodeDeltaExceedsMaximum, "Delta exceeds maximum allowed value")
+			return
+		}
+
+		// Increment asynchronously
+		newValue, err := cachedCounter.IncrementAsync(tenantID, counterID, delta)
+		if err != nil {
+			respondWithError(ctx, fasthttp.StatusInternalServerError, "INCREMENT_FAILED", "Failed to increment counter")
+			return
+		}
+
+		now := time.Now().UTC()
+		resp := &models.IncrementResponse{
+			CounterID: counterID,
+			Value:     newValue,
+			UpdatedAt: now,
+		}
+
+		respondWithJSON(ctx, fasthttp.StatusOK, resp)
+	}
+}
+
+// CachedSetCounterValueHandler handles counter value set requests with caching
+func CachedSetCounterValueHandler(cachedCounter *cache.CachedCounter) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		tenantID, ok := ctx.UserValue("tenant_id").(string)
+		if !ok || tenantID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "tenant_id is required")
+			return
+		}
+
+		counterID, ok := ctx.UserValue("counter_id").(string)
+		if !ok || counterID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "counter_id is required")
+			return
+		}
+
+		// Validate UUID formats
+		if err := utils.ValidateUUID(tenantID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid tenant ID format")
+			return
+		}
+		if err := utils.ValidateUUID(counterID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid counter ID format")
+			return
+		}
+
+		var req models.SetCounterValueRequest
+		if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_JSON", "Invalid JSON")
+			return
+		}
+
+		// Validate request after unmarshaling
+		if err := req.Validate(); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", err.Error())
+			return
+		}
+
+		// Double-check value is not nil (should be caught by Validate)
+		if req.Value == nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "value is required")
+			return
+		}
+
+		// Set value asynchronously
+		err := cachedCounter.SetAsync(tenantID, counterID, *req.Value)
+		if err != nil {
+			respondWithError(ctx, fasthttp.StatusInternalServerError, "SET_FAILED", "Failed to set counter value")
+			return
+		}
+
+		now := time.Now().UTC()
+		resp := &models.SetValueResponse{
+			CounterID: counterID,
+			Value:     *req.Value,
+			UpdatedAt: now,
+		}
+
+		respondWithJSON(ctx, fasthttp.StatusOK, resp)
 	}
 }

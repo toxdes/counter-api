@@ -1,6 +1,7 @@
 package router
 
 import (
+	"counter/internal/cache"
 	"counter/internal/database"
 	"counter/internal/handlers"
 	"counter/internal/middleware"
@@ -15,6 +16,49 @@ import (
 // Router holds the application router and dependencies
 type Router struct {
 	fasthttp.RequestHandler
+}
+
+// CORSMiddleware applies CORS headers to the request
+func CORSMiddleware(c *routing.Context, corsConfig *middleware.CORSConfig) {
+	// Apply CORS middleware
+	corsHandler := middleware.CORS(corsConfig)(func(ctx *fasthttp.RequestCtx) {
+		// Continue to next handler
+	})
+	corsHandler(c.RequestCtx)
+
+	// Don't continue if this was a preflight OPTIONS request (CORS middleware handled it)
+	if string(c.RequestCtx.Method()) == "OPTIONS" {
+		c.RequestCtx.SetStatusCode(fasthttp.StatusOK)
+	}
+}
+
+// LoggingMiddleware applies request logging
+func LoggingMiddleware(c *routing.Context, logger *middleware.Logger) {
+	// Apply Logging middleware
+	loggingHandler := middleware.Logging(nil)(func(ctx *fasthttp.RequestCtx) {
+		// Continue to next handler
+	})
+	loggingHandler(c.RequestCtx)
+}
+
+// toHandler wraps fasthttp handlers for routing library
+func toHandler(handler fasthttp.RequestHandler) routing.Handler {
+	return func(c *routing.Context) error {
+		// Don't execute handler if response was already sent (e.g., rate limited)
+		if c.RequestCtx.Response.StatusCode() != fasthttp.StatusOK && c.RequestCtx.Response.StatusCode() != fasthttp.StatusNotFound {
+			return nil
+		}
+
+		// Copy routing parameters to request context for known parameters
+		if tenantID := c.Param("tenant_id"); tenantID != "" {
+			c.RequestCtx.SetUserValue("tenant_id", tenantID)
+		}
+		if counterID := c.Param("counter_id"); counterID != "" {
+			c.RequestCtx.SetUserValue("counter_id", counterID)
+		}
+		handler(c.RequestCtx)
+		return nil
+	}
 }
 
 // NewRouter creates a new router with all routes and middleware
@@ -54,48 +98,18 @@ func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *
 	})
 
 	router.Use(func(c *routing.Context) error {
-		// Apply CORS middleware
-		corsHandler := middleware.CORS(corsConfig)(func(ctx *fasthttp.RequestCtx) {
-			// Continue to next handler
-		})
-		corsHandler(c.RequestCtx)
-
+		CORSMiddleware(c, corsConfig)
 		// Don't continue if this was a preflight OPTIONS request (CORS middleware handled it)
 		if string(c.RequestCtx.Method()) == "OPTIONS" {
 			return nil
 		}
-
 		return c.Next()
 	})
 
 	router.Use(func(c *routing.Context) error {
-		// Apply Logging middleware
-		loggingHandler := middleware.Logging(nil)(func(ctx *fasthttp.RequestCtx) {
-			// Continue to next handler
-		})
-		loggingHandler(c.RequestCtx)
+		LoggingMiddleware(c, logger)
 		return c.Next()
 	})
-
-	// Wrap fasthttp handlers for routing library
-	toHandler := func(handler fasthttp.RequestHandler) routing.Handler {
-		return func(c *routing.Context) error {
-			// Don't execute handler if response was already sent (e.g., rate limited)
-			if c.RequestCtx.Response.StatusCode() != fasthttp.StatusOK {
-				return nil
-			}
-
-			// Copy routing parameters to request context for known parameters
-			if tenantID := c.Param("tenant_id"); tenantID != "" {
-				c.RequestCtx.SetUserValue("tenant_id", tenantID)
-			}
-			if counterID := c.Param("counter_id"); counterID != "" {
-				c.RequestCtx.SetUserValue("counter_id", counterID)
-			}
-			handler(c.RequestCtx)
-			return nil
-		}
-	}
 
 	// Admin endpoints (require API key)
 	router.Post("/tenants", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateTenantHandler(db))))
@@ -179,4 +193,75 @@ func isTrustedProxy(ip net.IP) bool {
 	}
 
 	return false
+}
+
+// NewCachedRouter creates a new router with caching enabled
+func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger) *Router {
+	// Create router
+	router := routing.New()
+
+	// Apply global middleware as routing handlers
+	// IMPORTANT: Order matters! Rate limiting should be FIRST to reject requests early
+	router.Use(func(c *routing.Context) error {
+		// Apply rate limiting directly - don't use wrapped middleware
+		ip := getClientIP(c.RequestCtx)
+		isGet := string(c.RequestCtx.Method()) == "GET"
+
+		// Check if request should be allowed
+		allowed, retryAfter := rateLimiter.AllowRequest(ip, isGet)
+
+		// Set rate limit headers
+		maxReq := rateLimiter.GetMaxRequests()
+		if isGet {
+			maxReq = rateLimiter.GetMaxGetRequests()
+		}
+		c.RequestCtx.Response.Header.Set("X-RateLimit-Limit", strconv.Itoa(maxReq))
+
+		if !allowed {
+			// Rate limit exceeded - reject immediately
+			c.RequestCtx.Response.Header.Set("Retry-After", strconv.Itoa(retryAfter))
+			c.RequestCtx.Response.Header.SetContentType("application/json")
+			c.RequestCtx.SetStatusCode(fasthttp.StatusTooManyRequests)
+			c.RequestCtx.SetBodyString(`{"error":"RATE_LIMIT_EXCEEDED","message":"Too many requests. Please retry later."}`)
+			// Don't call c.Next() - stop the chain here
+			return nil
+		}
+
+		// Continue to next handler
+		return c.Next()
+	})
+
+	// Apply CORS middleware
+	router.Use(func(c *routing.Context) error {
+		CORSMiddleware(c, corsConfig)
+		return c.Next()
+	})
+
+	// Apply logging middleware
+	router.Use(func(c *routing.Context) error {
+		LoggingMiddleware(c, logger)
+		return c.Next()
+	})
+
+	// Admin endpoints (require API key)
+	router.Post("/tenants", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateTenantHandler(db))))
+
+	// Tenant endpoints
+	router.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantHandler(db)))
+	router.Post("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateCounterHandler(db))))
+
+	// Counter endpoints - use cached handlers
+	router.Get("/tenants/<tenant_id>/counters/<counter_id>", toHandler(handlers.CachedGetCounterHandler(cachedCounter)))
+	router.Post("/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(handlers.CachedIncrementCounterHandler(cachedCounter)))
+	router.Post("/tenants/<tenant_id>/counters/<counter_id>/set", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CachedSetCounterValueHandler(cachedCounter))))
+
+	// Custom 404 handler
+	router.NotFound(func(c *routing.Context) error {
+		c.RequestCtx.SetStatusCode(fasthttp.StatusNotFound)
+		c.RequestCtx.Response.Header.SetContentType("application/json")
+		c.RequestCtx.SetBody([]byte(`{"error":"NOT_FOUND","message":"Endpoint not found"}`))
+		return nil
+	})
+
+	return &Router{RequestHandler: router.HandleRequest}
 }
