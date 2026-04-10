@@ -4,7 +4,9 @@ import (
 	"counter/internal/config"
 	"counter/internal/database"
 	"counter/internal/middleware"
+	"counter/internal/migrations"
 	"counter/internal/router"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -17,6 +19,10 @@ import (
 )
 
 func main() {
+	// Define CLI flags
+	migrateFlag := flag.String("db-migrate", "", "Run database migrations (up or down)")
+	flag.Parse()
+
 	// Load .env file if present (for local development)
 	_ = godotenv.Load()
 
@@ -28,12 +34,7 @@ func main() {
 
 	// Initialize database
 	dbCfg := &database.DBConfig{
-		Host:         cfg.DBHost,
-		Port:         cfg.DBPort,
-		User:         cfg.DBUser,
-		Password:     cfg.DBPassword,
-		DBName:       cfg.DBName,
-		SSLMode:      cfg.DBSSLMode,
+		DatabaseURL:  cfg.DatabaseURL,
 		MaxOpenConns: cfg.DBMaxOpenConns,
 		MaxIdleConns: cfg.DBMaxIdleConns,
 	}
@@ -51,6 +52,28 @@ func main() {
 
 	log.Println("Database connection established")
 
+	// Handle migration commands
+	if *migrateFlag != "" {
+		switch *migrateFlag {
+		case "up":
+			log.Println("Running database migrations (up)...")
+			if err := migrations.RunUp(db); err != nil {
+				log.Fatalf("Migration failed: %v", err)
+			}
+			log.Println("Migrations completed successfully")
+			return
+		case "down":
+			log.Println("Running database migrations (down)...")
+			if err := migrations.RunDown(db); err != nil {
+				log.Fatalf("Migration failed: %v", err)
+			}
+			log.Println("Rollback completed successfully")
+			return
+		default:
+			log.Fatalf("Invalid migration direction: %s (use 'up' or 'down')", *migrateFlag)
+		}
+	}
+
 	// Initialize middleware
 	corsConfig := &middleware.CORSConfig{
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
@@ -60,17 +83,23 @@ func main() {
 		MaxAge:           cfg.CORSMaxAge,
 	}
 
-	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRequests, cfg.RateLimitWindow)
+	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRequests, cfg.RateLimitGetMultiplier, cfg.RateLimitWindow)
 
 	logger := middleware.NewDefaultLogger(cfg.LogLevel)
 
 	// Start rate limiter cleanup goroutine
+	stopCleanup := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(time.Duration(cfg.RateLimitCleanup) * time.Second)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			rateLimiter.Cleanup(time.Duration(cfg.RateLimitCleanup) * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				rateLimiter.Cleanup(time.Duration(cfg.RateLimitCleanup) * time.Second)
+			case <-stopCleanup:
+				return
+			}
 		}
 	}()
 
@@ -79,10 +108,11 @@ func main() {
 
 	// Configure server
 	server := &fasthttp.Server{
-		Handler:      r.ServeHTTP,
-		Name:         "Counter API",
-		ReadTimeout:  time.Second * 10,
-		WriteTimeout: time.Second * 10,
+		Handler:            r.ServeHTTP,
+		Name:               "Counter API",
+		ReadTimeout:        time.Second * 10,
+		WriteTimeout:       time.Second * 10,
+		MaxRequestBodySize: 1 * 1024 * 1024, // 1MB max request body
 	}
 
 	// Start server in goroutine
@@ -100,6 +130,10 @@ func main() {
 	<-sigChan
 
 	log.Println("Shutting down server...")
+
+	// Stop cleanup goroutine
+	close(stopCleanup)
+
 	if err := server.Shutdown(); err != nil {
 		log.Printf("Error during server shutdown: %v", err)
 	}

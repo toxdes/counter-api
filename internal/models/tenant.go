@@ -1,6 +1,7 @@
 package models
 
 import (
+	"counter/internal/utils"
 	"errors"
 	"time"
 )
@@ -18,8 +19,8 @@ func (t *Tenant) Validate() error {
 	if t == nil {
 		return errors.New("tenant is nil")
 	}
-	if t.Label == "" {
-		return errors.New("label is required")
+	if err := utils.ValidateLabel(t.Label); err != nil {
+		return err
 	}
 	return nil
 }
@@ -34,5 +35,13 @@ func (r *CreateTenantRequest) Validate() error {
 	if r.Label == "" {
 		return errors.New("label is required")
 	}
+
+	// Sanitize and validate label
+	sanitized, err := utils.SanitizeLabel(r.Label)
+	if err != nil {
+		return err
+	}
+	r.Label = sanitized
+
 	return nil
 }

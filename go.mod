@@ -13,5 +13,7 @@ require (
 require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/qiangxue/fasthttp-routing v0.0.0-20160225050629-6ccdc2a18d87 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

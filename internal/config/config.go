@@ -13,12 +13,7 @@ type Config struct {
 	ServerPort int
 
 	// Database
-	DBHost         string
-	DBPort         int
-	DBUser         string
-	DBPassword     string
-	DBName         string
-	DBSSLMode      string
+	DatabaseURL    string
 	DBMaxOpenConns int
 	DBMaxIdleConns int
 
@@ -26,9 +21,10 @@ type Config struct {
 	APIKey string
 
 	// Rate Limiting
-	RateLimitRequests int
-	RateLimitWindow   int
-	RateLimitCleanup  int
+	RateLimitRequests      int
+	RateLimitGetMultiplier int
+	RateLimitWindow        int
+	RateLimitCleanup       int
 
 	// CORS
 	CORSAllowedOrigins   string
@@ -47,20 +43,16 @@ func Load() (*Config, error) {
 		ServerHost: getEnv("SERVER_HOST", "0.0.0.0"),
 		ServerPort: getEnvInt("SERVER_PORT", 8080),
 
-		DBHost:         getEnv("DB_HOST", ""),
-		DBPort:         getEnvInt("DB_PORT", 5432),
-		DBUser:         getEnv("DB_USER", ""),
-		DBPassword:     getEnv("DB_PASSWORD", ""),
-		DBName:         getEnv("DB_NAME", ""),
-		DBSSLMode:      getEnv("DB_SSL_MODE", "disable"),
+		DatabaseURL:    getEnv("DATABASE_URL", ""),
 		DBMaxOpenConns: getEnvInt("DB_MAX_OPEN_CONNS", 25),
 		DBMaxIdleConns: getEnvInt("DB_MAX_IDLE_CONNS", 5),
 
 		APIKey: getEnv("API_KEY", ""),
 
-		RateLimitRequests: getEnvInt("RATE_LIMIT_REQUESTS", 10),
-		RateLimitWindow:   getEnvInt("RATE_LIMIT_WINDOW", 60),
-		RateLimitCleanup:  getEnvInt("RATE_LIMIT_CLEANUP", 300),
+		RateLimitRequests:      getEnvInt("RATE_LIMIT_REQUESTS", 10),
+		RateLimitGetMultiplier: getEnvInt("RATE_LIMIT_GET_MULTIPLIER", 3),
+		RateLimitWindow:        getEnvInt("RATE_LIMIT_WINDOW", 60),
+		RateLimitCleanup:       getEnvInt("RATE_LIMIT_CLEANUP", 300),
 
 		CORSAllowedOrigins:   getEnv("CORS_ALLOWED_ORIGINS", "*"),
 		CORSAllowedMethods:   getEnv("CORS_ALLOWED_METHODS", "GET,POST,OPTIONS"),
@@ -72,11 +64,14 @@ func Load() (*Config, error) {
 	}
 
 	// Validate required fields
-	if cfg.DBHost == "" || cfg.DBUser == "" || cfg.DBPassword == "" || cfg.DBName == "" {
-		return nil, fmt.Errorf("missing required database configuration")
+	if cfg.DatabaseURL == "" {
+		return nil, fmt.Errorf("missing required DATABASE_URL")
 	}
 	if cfg.APIKey == "" {
 		return nil, fmt.Errorf("missing required API_KEY")
+	}
+	if cfg.RateLimitGetMultiplier < 1 {
+		return nil, fmt.Errorf("RATE_LIMIT_GET_MULTIPLIER must be at least 1")
 	}
 
 	return cfg, nil

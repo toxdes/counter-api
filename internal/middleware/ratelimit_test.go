@@ -7,45 +7,68 @@ import (
 
 func TestTokenBucketAllowRequest(t *testing.T) {
 	tb := &tokenBucket{
-		tokens:      10,
-		maxTokens:   10,
-		refillRate:  10,
-		lastRefill:  time.Now(),
+		postTokens:     10,
+		getTokens:      30,
+		maxPostTokens:  10,
+		maxGetTokens:   30,
+		postRefillRate: 10,
+		getRefillRate:  30,
+		lastRefill:     time.Now(),
 	}
 
-	// First 10 requests should be allowed
+	// First 10 POST requests should be allowed
 	for i := 0; i < 10; i++ {
-		if !tb.AllowRequest() {
-			t.Errorf("Request %d should be allowed", i+1)
+		if !tb.AllowRequest(false) {
+			t.Errorf("POST request %d should be allowed", i+1)
 		}
 	}
 
-	// 11th request should be denied
-	if tb.AllowRequest() {
-		t.Error("Request 11 should be denied")
+	// 11th POST request should be denied
+	if tb.AllowRequest(false) {
+		t.Error("POST request 11 should be denied")
+	}
+
+	// But GET requests should still work (separate bucket)
+	for i := 0; i < 30; i++ {
+		if !tb.AllowRequest(true) {
+			t.Errorf("GET request %d should be allowed", i+1)
+		}
+	}
+
+	// 31st GET request should be denied
+	if tb.AllowRequest(true) {
+		t.Error("GET request 31 should be denied")
 	}
 }
 
 func TestTokenBucketRefill(t *testing.T) {
 	tb := &tokenBucket{
-		tokens:      0,
-		maxTokens:   10,
-		refillRate:  10,
-		lastRefill:  time.Now().Add(-time.Second),
+		postTokens:     0,
+		getTokens:      0,
+		maxPostTokens:  10,
+		maxGetTokens:   30,
+		postRefillRate: 10,
+		getRefillRate:  30,
+		lastRefill:     time.Now().Add(-time.Second),
 	}
 
-	// Should refill tokens
-	if !tb.AllowRequest() {
-		t.Error("Request should be allowed after refill")
+	// Should refill POST tokens
+	if !tb.AllowRequest(false) {
+		t.Error("POST request should be allowed after refill")
+	}
+
+	// Should refill GET tokens
+	if !tb.AllowRequest(true) {
+		t.Error("GET request should be allowed after refill")
 	}
 }
 
 func TestRateLimiter(t *testing.T) {
-	rl := NewRateLimiter(10, 60)
+	rl := NewRateLimiter(10, 1, 60)
 
 	// Allow 10 requests
 	for i := 0; i < 10; i++ {
-		allowed, retryAfter := rl.AllowRequest("192.168.1.1")
+		allowed, retryAfter := rl.AllowRequest("192.168.1.1", false)
 		if !allowed {
 			t.Errorf("Request %d should be allowed", i+1)
 		}
@@ -55,7 +78,7 @@ func TestRateLimiter(t *testing.T) {
 	}
 
 	// 11th request should be denied
-	allowed, retryAfter := rl.AllowRequest("192.168.1.1")
+	allowed, retryAfter := rl.AllowRequest("192.168.1.1", false)
 	if allowed {
 		t.Error("Request 11 should be denied")
 	}
@@ -65,10 +88,10 @@ func TestRateLimiter(t *testing.T) {
 }
 
 func TestRateLimiterCleanup(t *testing.T) {
-	rl := NewRateLimiter(10, 60)
+	rl := NewRateLimiter(10, 1, 60)
 
 	// Add an entry
-	rl.AllowRequest("192.168.1.1")
+	rl.AllowRequest("192.168.1.1", false)
 
 	// Wait and cleanup
 	time.Sleep(100 * time.Millisecond)

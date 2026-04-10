@@ -1,0 +1,80 @@
+info:
+  name: Create Counter
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{BASE_URL}}/tenants/{{tenant_id}}/counters"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: X-Api-Key
+      value: "{{API_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "label": "page_views",
+        "initial_value": 100
+      }
+  auth: inherit
+
+runtime:
+  variables:
+    - name: tenant_id
+      value: 89117f78-50b0-42d6-abcf-74ecf82b279a
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  # Create Counter
+
+  Creates a new counter under the specified tenant.
+
+  **Authentication:** Requires API key via X-Api-Key header
+
+  **Rate Limit:** 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)
+
+  ## URL Parameters
+  - `tenant_id` (UUID, required): The unique identifier of the tenant
+
+  ## Request Body
+  ```json
+  {
+    "label": "page_views",
+    "initial_value": 100
+  }
+  ```
+
+  ### Fields
+  - `label` (string, optional): Counter label
+    - Min: 1 character, Max: 255 characters
+    - Must be unique within this tenant
+  - `initial_value` (integer, optional): Starting value (default: 0)
+    - Range: int64 min to max
+
+  ## Response (201 Created)
+  ```json
+  {
+    "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
+    "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+    "label": "page_views",
+    "value": 100,
+    "created_at": "2026-04-08T10:30:00Z",
+    "updated_at": "2026-04-08T10:30:00Z"
+  }
+  ```
+
+  ## Errors
+  - 400 INVALID_JSON - Invalid JSON in request body
+  - 400 INVALID_UUID - Invalid tenant_id format
+  - 400 INVALID_PARAMETER - Parameter validation failed
+  - 404 TENANT_NOT_FOUND - Tenant does not exist
+  - 409 COUNTER_LABEL_EXISTS - Label already exists for this tenant
+  - 401 UNAUTHORIZED - Missing or invalid API key
+  - 429 RATE_LIMIT_EXCEEDED - Too many requests

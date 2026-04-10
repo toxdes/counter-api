@@ -6,12 +6,7 @@ import (
 
 func TestGetMigrationStatus(t *testing.T) {
 	cfg := &DBConfig{
-		Host:     "localhost",
-		Port:     5432,
-		User:     "postgres",
-		Password: "postgres",
-		DBName:   "counter_api_test",
-		SSLMode:  "disable",
+		DatabaseURL: "postgres://postgres:postgres@localhost:5432/counter_api_test?sslmode=disable",
 	}
 
 	db, err := NewDB(cfg)
@@ -35,12 +30,7 @@ func TestGetMigrationStatus(t *testing.T) {
 
 func TestRecordMigration(t *testing.T) {
 	cfg := &DBConfig{
-		Host:     "localhost",
-		Port:     5432,
-		User:     "postgres",
-		Password: "postgres",
-		DBName:   "counter_api_test",
-		SSLMode:  "disable",
+		DatabaseURL: "postgres://postgres:postgres@localhost:5432/counter_api_test?sslmode=disable",
 	}
 
 	db, err := NewDB(cfg)

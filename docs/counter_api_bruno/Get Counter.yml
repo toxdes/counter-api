@@ -1,0 +1,55 @@
+info:
+  name: Get Counter
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{BASE_URL}}/tenants/{{tenant_id}}/counters/{{counter_id}}"
+  headers:
+    - name: Content-Type
+      value: application/json
+  auth: inherit
+
+runtime:
+  variables:
+    - name: tenant_id
+      value: 89117f78-50b0-42d6-abcf-74ecf82b279a
+    - name: counter_id
+      value: b45bd0c4-7437-4387-bf01-78a4a126d6f9
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  # Get Counter
+
+  Retrieves the current value and details of a specific counter.
+
+  **Authentication:** None required (public endpoint)
+
+  **Rate Limit:** 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)
+
+  ## URL Parameters
+  - `tenant_id` (UUID, required): The unique identifier of the tenant
+  - `counter_id` (UUID, required): The unique identifier of the counter
+
+  ## Response (200 OK)
+  ```json
+  {
+    "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
+    "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+    "label": "page_views",
+    "value": 1523,
+    "created_at": "2026-04-08T10:30:00Z",
+    "updated_at": "2026-04-08T10:35:42Z"
+  }
+  ```
+
+  ## Errors
+  - 400 INVALID_UUID - Invalid tenant_id or counter_id format
+  - 404 COUNTER_NOT_FOUND - Counter does not exist
+  - 429 RATE_LIMIT_EXCEEDED - Too many requests

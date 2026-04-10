@@ -1,0 +1,65 @@
+info:
+  name: Create Tenant
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{BASE_URL}}/tenants"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: X-Api-Key
+      value: "{{API_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "label": "client1"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  # Create Tenant
+
+  Creates a new tenant with a unique label. Tenants act as isolated workspaces that contain counters.
+
+  **Authentication:** Requires API key via X-Api-Key header
+
+  **Rate Limit:** 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)
+
+  ## Request Body
+  ```json
+  {
+    "label": "production"
+  }
+  ```
+
+  ### Fields
+  - `label` (string, required): Unique identifier for the tenant
+    - Min: 1 character, Max: 255 characters
+    - Allowed: alphanumeric, spaces, hyphens, underscores, dots
+    - Must be unique across all tenants
+
+  ## Response (201 Created)
+  ```json
+  {
+    "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+    "label": "production",
+    "created_at": "2026-04-08T10:30:00Z",
+    "updated_at": "2026-04-08T10:30:00Z"
+  }
+  ```
+
+  ## Errors
+  - 400 INVALID_JSON - Invalid JSON in request body
+  - 400 INVALID_PARAMETER - Label validation failed
+  - 409 TENANT_LABEL_EXISTS - Label already in use
+  - 401 UNAUTHORIZED - Missing or invalid API key
+  - 429 RATE_LIMIT_EXCEEDED - Too many requests

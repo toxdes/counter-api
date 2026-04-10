@@ -1,0 +1,75 @@
+info:
+  name: Set Counter
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{BASE_URL}}/tenants/{{tenant_id}}/counters/{{counter_id}}/set"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: X-Api-Key
+      value: "{{API_KEY}}"
+  body:
+    type: json
+    data: |-
+      {
+        "value":10
+      }
+  auth: inherit
+
+runtime:
+  variables:
+    - name: tenant_id
+      value: 89117f78-50b0-42d6-abcf-74ecf82b279a
+    - name: counter_id
+      value: b45bd0c4-7437-4387-bf01-78a4a126d6f9
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  # Set Counter Value
+
+  Sets a counter to a specific value. Useful for resetting counters or setting them to a known state.
+
+  **Authentication:** Requires API key via X-Api-Key header
+
+  **Rate Limit:** 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)
+
+  ## URL Parameters
+  - `tenant_id` (UUID, required): The unique identifier of the tenant
+  - `counter_id` (UUID, required): The unique identifier of the counter
+
+  ## Request Body
+  ```json
+  {
+    "value": 100
+  }
+  ```
+
+  ### Fields
+  - `value` (integer, optional): The new value to set
+    - Range: int64 min to max
+    - If omitted, counter is set to 0
+
+  ## Response (200 OK)
+  ```json
+  {
+    "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
+    "value": 100,
+    "updated_at": "2026-04-08T10:35:50Z"
+  }
+  ```
+
+  ## Errors
+  - 400 INVALID_JSON - Invalid JSON in request body
+  - 400 INVALID_UUID - Invalid tenant_id or counter_id format
+  - 400 INVALID_VALUE - Value is out of valid range
+  - 404 COUNTER_NOT_FOUND - Counter does not exist
+  - 401 UNAUTHORIZED - Missing or invalid API key
+  - 429 RATE_LIMIT_EXCEEDED - Too many requests

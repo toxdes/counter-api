@@ -10,12 +10,7 @@ import (
 
 // DBConfig holds database connection configuration
 type DBConfig struct {
-	Host         string
-	Port         int
-	User         string
-	Password     string
-	DBName       string
-	SSLMode      string
+	DatabaseURL  string
 	MaxOpenConns int
 	MaxIdleConns int
 }
@@ -27,12 +22,7 @@ type DB struct {
 
 // NewDB creates a new database connection pool
 func NewDB(cfg *DBConfig) (*DB, error) {
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode,
-	)
-
-	db, err := sqlx.Connect("postgres", dsn)
+	db, err := sqlx.Connect("postgres", cfg.DatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}

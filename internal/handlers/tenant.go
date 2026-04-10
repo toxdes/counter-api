@@ -3,6 +3,7 @@ package handlers
 import (
 	"counter/internal/database"
 	"counter/internal/models"
+	"counter/internal/utils"
 	"encoding/json"
 	"time"
 
@@ -64,7 +65,17 @@ func CreateTenantHandler(db *database.DB) fasthttp.RequestHandler {
 // GetTenantHandler handles tenant retrieval requests
 func GetTenantHandler(db *database.DB) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		tenantID := ctx.UserValue("tenant_id").(string)
+		tenantID, ok := ctx.UserValue("tenant_id").(string)
+		if !ok || tenantID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "tenant_id is required")
+			return
+		}
+
+		// Validate UUID format
+		if err := utils.ValidateUUID(tenantID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid tenant ID format")
+			return
+		}
 
 		var tenant models.Tenant
 		err := db.Get(

@@ -9,23 +9,17 @@ func TestLoadDefaults(t *testing.T) {
 	// Clear all env vars
 	for _, env := range []string{
 		"SERVER_HOST", "SERVER_PORT",
-		"DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME",
+		"DATABASE_URL",
 		"API_KEY", "RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW",
 	} {
 		os.Unsetenv(env)
 	}
 
 	// Set minimum required vars
-	os.Setenv("DB_HOST", "localhost")
-	os.Setenv("DB_USER", "testuser")
-	os.Setenv("DB_PASSWORD", "testpass")
-	os.Setenv("DB_NAME", "testdb")
+	os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
 	os.Setenv("API_KEY", "test-key")
 	defer func() {
-		os.Unsetenv("DB_HOST")
-		os.Unsetenv("DB_USER")
-		os.Unsetenv("DB_PASSWORD")
-		os.Unsetenv("DB_NAME")
+		os.Unsetenv("DATABASE_URL")
 		os.Unsetenv("API_KEY")
 	}()
 
@@ -50,18 +44,12 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadFromEnv(t *testing.T) {
 	os.Setenv("SERVER_PORT", "9000")
-	os.Setenv("DB_NAME", "testdb")
+	os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost:9000/testdb?sslmode=require")
 	os.Setenv("API_KEY", "test-key")
-	os.Setenv("DB_HOST", "localhost")
-	os.Setenv("DB_USER", "testuser")
-	os.Setenv("DB_PASSWORD", "testpass")
 	defer func() {
 		os.Unsetenv("SERVER_PORT")
-		os.Unsetenv("DB_NAME")
+		os.Unsetenv("DATABASE_URL")
 		os.Unsetenv("API_KEY")
-		os.Unsetenv("DB_HOST")
-		os.Unsetenv("DB_USER")
-		os.Unsetenv("DB_PASSWORD")
 	}()
 
 	cfg, err := Load()
@@ -72,8 +60,8 @@ func TestLoadFromEnv(t *testing.T) {
 	if cfg.ServerPort != 9000 {
 		t.Errorf("Expected ServerPort 9000, got %d", cfg.ServerPort)
 	}
-	if cfg.DBName != "testdb" {
-		t.Errorf("Expected DBName 'testdb', got '%s'", cfg.DBName)
+	if cfg.DatabaseURL != "postgres://testuser:testpass@localhost:9000/testdb?sslmode=require" {
+		t.Errorf("Expected DatabaseURL 'postgres://testuser:testpass@localhost:9000/testdb?sslmode=require', got '%s'", cfg.DatabaseURL)
 	}
 	if cfg.APIKey != "test-key" {
 		t.Errorf("Expected APIKey 'test-key', got '%s'", cfg.APIKey)
@@ -82,7 +70,7 @@ func TestLoadFromEnv(t *testing.T) {
 
 func TestValidateRequired(t *testing.T) {
 	requiredVars := []string{
-		"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "API_KEY",
+		"DATABASE_URL", "API_KEY",
 	}
 
 	for _, env := range requiredVars {

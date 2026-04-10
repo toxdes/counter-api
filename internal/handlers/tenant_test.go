@@ -93,12 +93,7 @@ func TestGetTenantNotFound(t *testing.T) {
 // Helper functions
 func setupTestDB(t *testing.T) *database.DB {
 	cfg := &database.DBConfig{
-		Host:     "localhost",
-		Port:     5432,
-		User:     "postgres",
-		Password: "postgres",
-		DBName:   "counter_api_test",
-		SSLMode:  "disable",
+		DatabaseURL: "postgres://postgres:postgres@localhost:5432/counter_api_test?sslmode=disable",
 	}
 
 	db, err := database.NewDB(cfg)

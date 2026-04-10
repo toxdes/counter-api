@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/valyala/fasthttp"
@@ -37,7 +38,7 @@ func CORS(config *CORSConfig) func(fasthttp.RequestHandler) fasthttp.RequestHand
 			}
 
 			if config.MaxAge > 0 {
-				ctx.Response.Header.Set("Access-Control-Max-Age", string(rune(config.MaxAge)))
+				ctx.Response.Header.Set("Access-Control-Max-Age", strconv.Itoa(config.MaxAge))
 			}
 
 			// Handle preflight requests

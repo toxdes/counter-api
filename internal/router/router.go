@@ -4,8 +4,11 @@ import (
 	"counter/internal/database"
 	"counter/internal/handlers"
 	"counter/internal/middleware"
-	"os"
+	"net"
+	"strconv"
+	"strings"
 
+	"github.com/qiangxue/fasthttp-routing"
 	"github.com/valyala/fasthttp"
 )
 
@@ -14,110 +17,166 @@ type Router struct {
 	fasthttp.RequestHandler
 }
 
-// Config holds router configuration
-type Config struct {
-	CORSConfig  *middleware.CORSConfig
-	RateLimiter *middleware.RateLimiter
-	APIKey      string
-	Logger      *middleware.Logger
-}
-
 // NewRouter creates a new router with all routes and middleware
 func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger) *Router {
-	// Create router handler
-	handler := fasthttp.CompressHandlerBrotliLevel(middleware.CORS(corsConfig)(
-		middleware.RateLimit(rateLimiter)(
-			middleware.Logging(os.Stdout)(func(ctx *fasthttp.RequestCtx) {
-				switch string(ctx.Path()) {
-				// Admin endpoints (require API key)
-				case "/tenants":
-					if string(ctx.Method()) == "POST" {
-						middleware.APIKeyAuth(apiKey)(handlers.CreateTenantHandler(db))(ctx)
-						return
-					}
-					ctx.SetStatusCode(fasthttp.StatusMethodNotAllowed)
-					return
+	// Create router
+	router := routing.New()
 
-				// Tenant endpoints
-				default:
-					// Parse tenant ID from path
-					path := string(ctx.Path())
-					if len(path) > len("/tenants/") {
-						tenantID := path[len("/tenants/"):]
-						ctx.SetUserValue("tenant_id", tenantID)
+	// Apply global middleware as routing handlers
+	// IMPORTANT: Order matters! Rate limiting should be FIRST to reject requests early
+	router.Use(func(c *routing.Context) error {
+		// Apply rate limiting directly - don't use wrapped middleware
+		ip := getClientIP(c.RequestCtx)
+		isGet := string(c.RequestCtx.Method()) == "GET"
 
-						// Check if it's a counter path
-						if idx := indexOf(path, "/counters/", len("/tenants/")); idx > 0 {
-							// Extract counter ID
-							counterIDStart := idx + len("/counters/")
-							if counterIDEnd := indexOf(path, "/", counterIDStart); counterIDEnd > 0 {
-								// Counter operation path
-								counterID := path[counterIDStart:counterIDEnd]
-								operation := path[counterIDEnd:]
+		// Check if request should be allowed
+		allowed, retryAfter := rateLimiter.AllowRequest(ip, isGet)
 
-								ctx.SetUserValue("counter_id", counterID)
+		// Set rate limit headers
+		maxReq := rateLimiter.GetMaxRequests()
+		if isGet {
+			maxReq = rateLimiter.GetMaxGetRequests()
+		}
+		c.RequestCtx.Response.Header.Set("X-RateLimit-Limit", strconv.Itoa(maxReq))
 
-								switch operation {
-								case "/inc":
-									if string(ctx.Method()) == "POST" {
-										handlers.IncrementCounterHandler(db)(ctx)
-										return
-									}
-								case "/set":
-									if string(ctx.Method()) == "POST" {
-										handlers.SetCounterValueHandler(db)(ctx)
-										return
-									}
-								default:
-									if string(ctx.Method()) == "GET" {
-										handlers.GetCounterHandler(db)(ctx)
-										return
-									}
-								}
-							} else if string(ctx.Method()) == "GET" {
-								// Get counter
-								ctx.SetUserValue("counter_id", path[counterIDStart:])
-								handlers.GetCounterHandler(db)(ctx)
-								return
-							}
-						} else if string(ctx.Method()) == "POST" {
-							// Create counter under tenant
-							middleware.APIKeyAuth(apiKey)(handlers.CreateCounterHandler(db))(ctx)
-							return
-						} else if string(ctx.Method()) == "GET" {
-							// Get tenant
-							handlers.GetTenantHandler(db)(ctx)
-							return
-						}
-					}
+		if !allowed {
+			// Rate limit exceeded - reject immediately
+			c.RequestCtx.Response.Header.Set("Retry-After", strconv.Itoa(retryAfter))
+			c.RequestCtx.Response.Header.SetContentType("application/json")
+			c.RequestCtx.SetStatusCode(fasthttp.StatusTooManyRequests)
+			c.RequestCtx.SetBodyString(`{"error":"RATE_LIMIT_EXCEEDED","message":"Too many requests. Please retry later."}`)
+			// Don't call c.Next() - stop the chain here
+			return nil
+		}
 
-					ctx.SetStatusCode(fasthttp.StatusNotFound)
-					return
-				}
-			}),
-		),
-	), 5, 5)
+		// Request passed rate limit, continue to next middleware
+		return c.Next()
+	})
 
-	return &Router{RequestHandler: handler}
-}
+	router.Use(func(c *routing.Context) error {
+		// Apply CORS middleware
+		corsHandler := middleware.CORS(corsConfig)(func(ctx *fasthttp.RequestCtx) {
+			// Continue to next handler
+		})
+		corsHandler(c.RequestCtx)
 
-// indexOf finds the index of a substring starting from a given position
-func indexOf(s, substr string, start int) int {
-	if start < 0 {
-		start = 0
-	}
-	if start >= len(s) {
-		return -1
-	}
-	for i := start; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
+		// Don't continue if this was a preflight OPTIONS request (CORS middleware handled it)
+		if string(c.RequestCtx.Method()) == "OPTIONS" {
+			return nil
+		}
+
+		return c.Next()
+	})
+
+	router.Use(func(c *routing.Context) error {
+		// Apply Logging middleware
+		loggingHandler := middleware.Logging(nil)(func(ctx *fasthttp.RequestCtx) {
+			// Continue to next handler
+		})
+		loggingHandler(c.RequestCtx)
+		return c.Next()
+	})
+
+	// Wrap fasthttp handlers for routing library
+	toHandler := func(handler fasthttp.RequestHandler) routing.Handler {
+		return func(c *routing.Context) error {
+			// Don't execute handler if response was already sent (e.g., rate limited)
+			if c.RequestCtx.Response.StatusCode() != fasthttp.StatusOK {
+				return nil
+			}
+
+			// Copy routing parameters to request context for known parameters
+			if tenantID := c.Param("tenant_id"); tenantID != "" {
+				c.RequestCtx.SetUserValue("tenant_id", tenantID)
+			}
+			if counterID := c.Param("counter_id"); counterID != "" {
+				c.RequestCtx.SetUserValue("counter_id", counterID)
+			}
+			handler(c.RequestCtx)
+			return nil
 		}
 	}
-	return -1
+
+	// Admin endpoints (require API key)
+	router.Post("/tenants", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateTenantHandler(db))))
+
+	// Tenant endpoints
+	router.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantHandler(db)))
+	router.Post("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateCounterHandler(db))))
+
+	// Counter endpoints
+	router.Get("/tenants/<tenant_id>/counters/<counter_id>", toHandler(handlers.GetCounterHandler(db)))
+	router.Post("/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(handlers.IncrementCounterHandler(db)))
+	router.Post("/tenants/<tenant_id>/counters/<counter_id>/set", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.SetCounterValueHandler(db))))
+
+	// Custom 404 handler
+	router.NotFound(func(c *routing.Context) error {
+		c.RequestCtx.SetStatusCode(fasthttp.StatusNotFound)
+		c.RequestCtx.Response.Header.SetContentType("application/json")
+		c.RequestCtx.SetBody([]byte(`{"error":"NOT_FOUND","message":"Endpoint not found"}`))
+		return nil
+	})
+
+	return &Router{RequestHandler: router.HandleRequest}
 }
 
 // ServeHTTP implements the fasthttp.RequestHandler interface
 func (r *Router) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	r.RequestHandler(ctx)
+}
+
+// getClientIP extracts the client IP from the request securely
+func getClientIP(ctx *fasthttp.RequestCtx) string {
+	// IMPORTANT: Don't trust client-controlled headers for rate limiting
+	remoteIP := ctx.RemoteIP()
+
+	// Only trust headers from trusted proxies (localhost/private network)
+	if isTrustedProxy(remoteIP) {
+		// Try X-Real-IP first
+		if ip := ctx.Request.Header.Peek("X-Real-IP"); len(ip) > 0 {
+			parsedIP := net.ParseIP(string(ip))
+			if parsedIP != nil {
+				return parsedIP.String()
+			}
+		}
+
+		// Try X-Forwarded-For (take first IP in chain)
+		if ip := ctx.Request.Header.Peek("X-Forwarded-For"); len(ip) > 0 {
+			ips := strings.Split(string(ip), ",")
+			if len(ips) > 0 {
+				parsedIP := net.ParseIP(strings.TrimSpace(ips[0]))
+				if parsedIP != nil {
+					return parsedIP.String()
+				}
+			}
+		}
+	}
+
+	return remoteIP.String()
+}
+
+// isTrustedProxy checks if an IP is from a trusted proxy
+func isTrustedProxy(ip net.IP) bool {
+	if ip.IsLoopback() {
+		return true
+	}
+
+	if ip.IsPrivate() {
+		return true
+	}
+
+	// IPv4 private ranges
+	if ip4 := ip.To4(); ip4 != nil {
+		if ip4[0] == 10 {
+			return true
+		}
+		if ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31 {
+			return true
+		}
+		if ip4[0] == 192 && ip4[1] == 168 {
+			return true
+		}
+	}
+
+	return false
 }

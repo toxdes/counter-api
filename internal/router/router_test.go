@@ -21,7 +21,7 @@ func TestRouterSetup(t *testing.T) {
 		MaxAge:           3600,
 	}
 
-	rateLimiter := middleware.NewRateLimiter(10, 60)
+	rateLimiter := middleware.NewRateLimiter(10, 1, 60)
 	logger := middleware.NewDefaultLogger("info")
 
 	router := NewRouter(db, corsConfig, rateLimiter, "test-key", logger)
@@ -44,7 +44,7 @@ func TestAdminEndpointsRequireAuth(t *testing.T) {
 		MaxAge:           3600,
 	}
 
-	rateLimiter := middleware.NewRateLimiter(10, 60)
+	rateLimiter := middleware.NewRateLimiter(10, 1, 60)
 	logger := middleware.NewDefaultLogger("info")
 
 	router := NewRouter(db, corsConfig, rateLimiter, "test-key", logger)
@@ -76,7 +76,7 @@ func TestPublicEndpointsNoAuth(t *testing.T) {
 		MaxAge:           3600,
 	}
 
-	rateLimiter := middleware.NewRateLimiter(10, 60)
+	rateLimiter := middleware.NewRateLimiter(10, 1, 60)
 	logger := middleware.NewDefaultLogger("info")
 
 	router := NewRouter(db, corsConfig, rateLimiter, "test-key", logger)
@@ -101,12 +101,7 @@ func TestPublicEndpointsNoAuth(t *testing.T) {
 // Helper functions
 func setupTestDB(t *testing.T) *database.DB {
 	cfg := &database.DBConfig{
-		Host:     "localhost",
-		Port:     5432,
-		User:     "postgres",
-		Password: "postgres",
-		DBName:   "counter_api_test",
-		SSLMode:  "disable",
+		DatabaseURL: "postgres://postgres:postgres@localhost:5432/counter_api_test?sslmode=disable",
 	}
 
 	db, err := database.NewDB(cfg)

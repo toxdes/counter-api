@@ -6,12 +6,7 @@ import (
 
 func TestNewDB(t *testing.T) {
 	cfg := &DBConfig{
-		Host:     "localhost",
-		Port:     5432,
-		User:     "postgres",
-		Password: "postgres",
-		DBName:   "counter_api_test",
-		SSLMode:  "disable",
+		DatabaseURL: "postgres://postgres:postgres@localhost:5432/counter_api_test?sslmode=disable",
 	}
 
 	// This test requires a running PostgreSQL instance
@@ -36,12 +31,7 @@ func TestNewDB(t *testing.T) {
 
 func TestDBStats(t *testing.T) {
 	cfg := &DBConfig{
-		Host:         "localhost",
-		Port:         5432,
-		User:         "postgres",
-		Password:     "postgres",
-		DBName:       "counter_api_test",
-		SSLMode:      "disable",
+		DatabaseURL:  "postgres://postgres:postgres@localhost:5432/counter_api_test?sslmode=disable",
 		MaxOpenConns: 10,
 		MaxIdleConns: 5,
 	}

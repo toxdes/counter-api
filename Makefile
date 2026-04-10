@@ -1,4 +1,4 @@
-.PHONY: build run test clean migrate-up migrate-down help
+.PHONY: build run test clean migrate-up migrate-down docs docs-generator help
 
 build:
 	go build -o counter .
@@ -10,22 +10,25 @@ test:
 	go test -v -race ./...
 
 migrate-up:
-	@echo "Running migrations..."
-	@for file in migrations/*.up.sql; do \
-		echo "Running $$file..."; \
-		psql -h localhost -U postgres -d counter_api -f "$$file"; \
-	done
+	@echo "Running database migrations..."
+	./counter --db-migrate=up
 
 migrate-down:
-	@echo "Rolling back migrations..."
-	@for file in migrations/*.down.sql; do \
-		echo "Running $$file..."; \
-		psql -h localhost -U postgres -d counter_api -f "$$file"; \
-	done
+	@echo "Rolling back database migrations..."
+	./counter --db-migrate=down
 
 clean:
 	rm -f counter
+	rm -f docs-generator
 	rm -f *.log
+
+docs: docs-generator
+	@echo "Generating API documentation..."
+	./docs-generator
+
+docs-generator:
+	@echo "Building docs generator..."
+	go build -o docs-generator ./cmd/docs-generator
 
 help:
 	@echo "Available targets:"
@@ -34,4 +37,5 @@ help:
 	@echo "  test         - Run tests"
 	@echo "  migrate-up   - Apply pending migrations"
 	@echo "  migrate-down - Rollback last migration"
+	@echo "  docs         - Generate HTML API documentation"
 	@echo "  clean        - Clean build artifacts"
