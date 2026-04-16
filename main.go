@@ -32,7 +32,7 @@ func main() {
 
 	// Handle version flag
 	if *versionFlag {
-		fmt.Printf("Counter API v%s\n", Version)
+		fmt.Printf("Counter API v %s\n", Version)
 		return
 	}
 
