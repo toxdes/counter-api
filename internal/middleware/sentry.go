@@ -9,6 +9,14 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// SentryConfig holds configuration for Sentry middleware
+type SentryConfig struct {
+	DSN         string
+	Environment string
+	Release     string
+	SampleRate  float64
+}
+
 // sentryContext holds extracted request context for Sentry
 type sentryContext struct {
 	TenantID   string

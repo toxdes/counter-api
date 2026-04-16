@@ -24,7 +24,7 @@ func TestRouterSetup(t *testing.T) {
 	rateLimiter := middleware.NewRateLimiter(10, 1, 60)
 	logger := middleware.NewDefaultLogger("info")
 
-	router := NewRouter(db, corsConfig, rateLimiter, "test-key", logger)
+	router := NewRouter(db, corsConfig, rateLimiter, "test-key", logger, nil)
 
 	if router == nil {
 		t.Error("Expected router to be created")
@@ -47,7 +47,7 @@ func TestAdminEndpointsRequireAuth(t *testing.T) {
 	rateLimiter := middleware.NewRateLimiter(10, 1, 60)
 	logger := middleware.NewDefaultLogger("info")
 
-	router := NewRouter(db, corsConfig, rateLimiter, "test-key", logger)
+	router := NewRouter(db, corsConfig, rateLimiter, "test-key", logger, nil)
 
 	// Test POST /tenants without auth
 	ctx := &fasthttp.RequestCtx{}
@@ -79,7 +79,7 @@ func TestPublicEndpointsNoAuth(t *testing.T) {
 	rateLimiter := middleware.NewRateLimiter(10, 1, 60)
 	logger := middleware.NewDefaultLogger("info")
 
-	router := NewRouter(db, corsConfig, rateLimiter, "test-key", logger)
+	router := NewRouter(db, corsConfig, rateLimiter, "test-key", logger, nil)
 
 	// Create a tenant first
 	tenantID := createTestTenant(t, db, "blog")
