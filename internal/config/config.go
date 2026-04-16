@@ -43,6 +43,12 @@ type Config struct {
 	CacheWorkers      int
 	CacheQueueSize    int
 	CacheShutdownWait int
+
+	// Sentry
+	SentryDSN         string
+	SentryEnvironment string
+	SentryRelease     string
+	SentrySampleRate  float64
 }
 
 // Load loads configuration from environment variables with sensible defaults
@@ -76,6 +82,11 @@ func Load() (*Config, error) {
 		CacheWorkers:      getEnvInt("CACHE_WORKERS", 2),
 		CacheQueueSize:    getEnvInt("CACHE_QUEUE_SIZE", 10000),
 		CacheShutdownWait: getEnvInt("CACHE_SHUTDOWN_WAIT", 5),
+
+		SentryDSN:         getEnv("SENTRY_DSN", ""),
+		SentryEnvironment: getEnv("SENTRY_ENVIRONMENT", "development"),
+		SentryRelease:     getEnv("SENTRY_RELEASE", ""),
+		SentrySampleRate:  getEnvFloat("SENTRY_SAMPLE_RATE", 0.5),
 	}
 
 	// Validate required fields
@@ -105,6 +116,11 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// Validate Sentry configuration
+	if cfg.SentrySampleRate < 0 || cfg.SentrySampleRate > 1 {
+		return nil, fmt.Errorf("SENTRY_SAMPLE_RATE must be between 0.0 and 1.0")
+	}
+
 	return cfg, nil
 }
 
@@ -128,6 +144,15 @@ func getEnvBool(key string, defaultValue bool) bool {
 	if value := os.Getenv(key); value != "" {
 		if boolVal, err := strconv.ParseBool(value); err == nil {
 			return boolVal
+		}
+	}
+	return defaultValue
+}
+
+func getEnvFloat(key string, defaultValue float64) float64 {
+	if value := os.Getenv(key); value != "" {
+		if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
+			return floatVal
 		}
 	}
 	return defaultValue
