@@ -3,7 +3,7 @@
 VERSION ?= $(shell cat version.txt 2>/dev/null || echo "dev")
 LDFLAGS = -X 'main.Version=$(VERSION)'
 
-build:
+build: docs
 	go build -ldflags="$(LDFLAGS)" -o counter .
 
 run: build
@@ -23,11 +23,12 @@ migrate-down:
 clean:
 	rm -f counter
 	rm -f *.log
+	rm -f internal/handlers/docs.html
 
 docs:
 	@echo "Preparing API documentation..."
-	@sed -i "s|{{BASE_URL}}|https://counter-api.toxdes.com|g" docs/counter-api.html
-	@echo "Docs ready - BASE_URL replaced with https://counter-api.toxdes.com"
+	@sed "s|{{BASE_URL}}|https://counter-api.toxdes.com|g" docs/counter-api.html > internal/handlers/docs.html
+	@echo "Docs ready - embedded in binary"
 
 version:
 	@echo "Counter API v$(VERSION)"
@@ -66,7 +67,7 @@ help:
 	@echo "  test         - Run tests"
 	@echo "  migrate-up   - Apply pending migrations"
 	@echo "  migrate-down - Rollback last migration"
-	@echo "  docs         - Prepare API documentation (replace BASE_URL)"
+	@echo "  docs         - Prepare API documentation (embed in binary)"
 	@echo "  version      - Show application version"
 	@echo "  bump         - Bump patch version (1.0.3 → 1.0.4)"
 	@echo "  bump-minor   - Bump minor version (1.0.3 → 1.1.0)"
