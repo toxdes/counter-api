@@ -3,8 +3,8 @@
 ## Development Build
 
 ```bash
-go build -o counter-api
-./counter-api --version
+go build -o counter
+./counter --version
 # Output: Counter API v dev
 ```
 
@@ -14,8 +14,8 @@ To include version information in the binary:
 
 ```bash
 VERSION=$(cat version.txt)
-go build -ldflags="-X 'main.Version=${VERSION}'" -o counter-api
-./counter-api --version
+go build -ldflags="-X 'main.Version=${VERSION}'" -o counter
+./counter --version
 # Output: Counter API v1.0.3
 ```
 
@@ -24,5 +24,5 @@ go build -ldflags="-X 'main.Version=${VERSION}'" -o counter-api
 ```dockerfile
 COPY version.txt .
 RUN VERSION=$(cat version.txt) && \
-    go build -ldflags="-X 'main.Version=${VERSION}'" -o counter-api
+    go build -ldflags="-X 'main.Version=${VERSION}'" -o counter
 ```

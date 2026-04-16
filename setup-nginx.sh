@@ -28,11 +28,11 @@ sed -i "s/api.example.com/$DOMAIN/g" /home/bets/pro/real/counter/nginx.conf
 
 # Copy nginx config
 echo "📦 Installing nginx configuration..."
-cp /home/bets/pro/real/counter/nginx.conf "$NGINX_SITES_AVAILABLE/counter-api"
+cp /home/bets/pro/real/counter/nginx.conf "$NGINX_SITES_AVAILABLE/counter"
 
 # Enable site
 echo "🔗 Enabling site..."
-ln -sf "$NGINX_SITES_AVAILABLE/counter-api" "$NGINX_SITES_ENABLED/counter-api"
+ln -sf "$NGINX_SITES_AVAILABLE/counter" "$NGINX_SITES_ENABLED/counter"
 
 # Test nginx configuration
 echo "🧪 Testing nginx configuration..."
@@ -64,7 +64,7 @@ fi
 echo ""
 echo "🔧 Creating systemd service..."
 
-cat > /etc/systemd/system/counter-api.service <<EOF
+cat > /etc/systemd/system/counter.service <<EOF
 [Unit]
 Description=Counter API
 After=network.target nginx.service
@@ -78,7 +78,7 @@ Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=counter-api
+SyslogIdentifier=counter
 
 # Security
 NoNewPrivileges=true
@@ -104,16 +104,16 @@ echo ""
 echo "📝 Next steps:"
 echo "   1. Update .env with your production settings"
 echo "   2. Run migrations: ./counter --db-migrate=up"
-echo "   3. Start service: sudo systemctl start counter-api"
-echo "   4. Enable on boot: sudo systemctl enable counter-api"
+echo "   3. Start service: sudo systemctl start counter"
+echo "   4. Enable on boot: sudo systemctl enable counter"
 echo "   5. Reload nginx: sudo systemctl reload nginx"
 echo ""
 echo "🔍 Useful commands:"
-echo "   View logs: sudo journalctl -u counter-api -f"
-echo "   Restart: sudo systemctl restart counter-api"
-echo "   Status: sudo systemctl status counter-api"
+echo "   View logs: sudo journalctl -u counter -f"
+echo "   Restart: sudo systemctl restart counter"
+echo "   Status: sudo systemctl status counter"
 echo ""
 echo "📊 Monitor:"
 echo "   Rate limits: Check X-RateLimit headers in responses"
-echo "   Nginx logs: tail -f /var/log/nginx/counter-api-error.log"
-echo "   App logs: sudo journalctl -u counter-api -f"
+echo "   Nginx logs: tail -f /var/log/nginx/counter-error.log"
+echo "   App logs: sudo journalctl -u counter -f"

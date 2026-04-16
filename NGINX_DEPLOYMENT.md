@@ -42,14 +42,14 @@ sudo yum install nginx
 
 ```bash
 # Copy the provided config
-sudo cp nginx.conf /etc/nginx/sites-available/counter-api
+sudo cp nginx.conf /etc/nginx/sites-available/counter
 
 # Edit domain name
-sudo nano /etc/nginx/sites-available/counter-api
+sudo nano /etc/nginx/sites-available/counter
 # Change api.example.com to your domain
 
 # Enable site
-sudo ln -s /etc/nginx/sites-available/counter-api /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/counter /etc/nginx/sites-enabled/
 
 # Test configuration
 sudo nginx -t
@@ -81,7 +81,7 @@ sudo certbot renew --dry-run
 nohup ./counter > counter.log 2>&1 &
 
 # Or use systemd (recommended)
-sudo systemctl start counter-api
+sudo systemctl start counter
 ```
 
 ---
@@ -128,8 +128,8 @@ curl https://www.ssllabs.com/ssltest/analyze.html?d=api.yourdomain.com
 - DATABASE_URL set in .env
 - API_KEY set in .env (random, strong)
 - Migrations run: `./counter --db-migrate=up`
-- Service starts: `systemctl start counter-api`
-- Service enabled on boot: `systemctl enable counter-api`
+- Service starts: `systemctl start counter`
+- Service enabled on boot: `systemctl enable counter`
 - Nginx reloaded: `systemctl reload nginx`
 - Rate limiting tested
 - SSL tested (ssltest.com)
@@ -153,7 +153,7 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 **Symptoms:** Nginx can't reach your app
 
 **Fixes:**
-1. Check app is running: `systemctl status counter-api`
+1. Check app is running: `systemctl status counter`
 2. Check app is listening on 8080: `netstat -tlnp | grep 8080`
 3. Check nginx can reach localhost: `curl http://localhost:8080`
 
@@ -199,7 +199,7 @@ sudo tail -f /var/log/nginx/api.example.com-access.log
 sudo tail -f /var/log/nginx/api.example.com-error.log
 
 # Application logs
-sudo journalctl -u counter-api -f
+sudo journalctl -u counter -f
 ```
 
 ---
@@ -277,10 +277,10 @@ server_tokens off;
 |------|---------|
 | Reload nginx | `sudo systemctl reload nginx` |
 | Restart nginx | `sudo systemctl restart nginx` |
-| Start API | `sudo systemctl start counter-api` |
-| Stop API | `sudo systemctl stop counter-api` |
-| Restart API | `sudo systemctl restart counter-api` |
-| View logs | `sudo journalctl -u counter-api -f` |
+| Start API | `sudo systemctl start counter` |
+| Stop API | `sudo systemctl stop counter` |
+| Restart API | `sudo systemctl restart counter` |
+| View logs | `sudo journalctl -u counter -f` |
 | Test nginx config | `sudo nginx -t` |
 | Renew SSL | `sudo certbot renew` |
 
