@@ -65,7 +65,7 @@ func toHandler(handler fasthttp.RequestHandler) routing.Handler {
 }
 
 // NewRouter creates a new router with all routes and middleware
-func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger) *Router {
+func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger, sentryConfig *middleware.SentryConfig) *Router {
 	// Create router
 	router := routing.New()
 
@@ -99,6 +99,19 @@ func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *
 		// Request passed rate limit, continue to next middleware
 		return c.Next()
 	})
+
+	// Apply Sentry middleware if configured (after rate limiting, before CORS/logging)
+	if sentryConfig != nil && sentryConfig.DSN != "" {
+		router.Use(func(c *routing.Context) error {
+			// Apply Sentry middleware directly to the request context
+			sentryHandler := middleware.NewSentryHandler(func(ctx *fasthttp.RequestCtx) {
+				// This will be called after Sentry processing
+				// Continue the chain
+			})
+			sentryHandler(c.RequestCtx)
+			return c.Next()
+		})
+	}
 
 	router.Use(func(c *routing.Context) error {
 		handled := CORSMiddleware(c, corsConfig)
@@ -206,7 +219,7 @@ func isTrustedProxy(ip net.IP) bool {
 }
 
 // NewCachedRouter creates a new router with caching enabled
-func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger) *Router {
+func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger, sentryConfig *middleware.SentryConfig) *Router {
 	// Create router
 	router := routing.New()
 
@@ -240,6 +253,19 @@ func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsCo
 		// Continue to next middleware
 		return c.Next()
 	})
+
+	// Apply Sentry middleware if configured (after rate limiting, before CORS/logging)
+	if sentryConfig != nil && sentryConfig.DSN != "" {
+		router.Use(func(c *routing.Context) error {
+			// Apply Sentry middleware directly to the request context
+			sentryHandler := middleware.NewSentryHandler(func(ctx *fasthttp.RequestCtx) {
+				// This will be called after Sentry processing
+				// Continue the chain
+			})
+			sentryHandler(c.RequestCtx)
+			return c.Next()
+		})
+	}
 
 	// Apply CORS middleware
 	router.Use(func(c *routing.Context) error {

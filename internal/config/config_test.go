@@ -199,3 +199,102 @@ func TestCacheValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestSentryDefaults(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	os.Setenv("API_KEY", "test-key")
+	defer func() {
+		os.Unsetenv("DATABASE_URL")
+		os.Unsetenv("API_KEY")
+		os.Unsetenv("SENTRY_DSN")
+		os.Unsetenv("SENTRY_ENVIRONMENT")
+		os.Unsetenv("SENTRY_RELEASE")
+		os.Unsetenv("SENTRY_SAMPLE_RATE")
+	}()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if cfg.SentryDSN != "" {
+		t.Errorf("Expected SentryDSN default empty, got '%s'", cfg.SentryDSN)
+	}
+	if cfg.SentryEnvironment != "development" {
+		t.Errorf("Expected SentryEnvironment default 'development', got '%s'", cfg.SentryEnvironment)
+	}
+	if cfg.SentryRelease != "" {
+		t.Errorf("Expected SentryRelease default empty, got '%s'", cfg.SentryRelease)
+	}
+	if cfg.SentrySampleRate != 0.5 {
+		t.Errorf("Expected SentrySampleRate default 0.5, got %f", cfg.SentrySampleRate)
+	}
+}
+
+func TestSentryFromEnv(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	os.Setenv("API_KEY", "test-key")
+	os.Setenv("SENTRY_DSN", "https://test@sentry.io/123")
+	os.Setenv("SENTRY_ENVIRONMENT", "production")
+	os.Setenv("SENTRY_RELEASE", "v1.0.0")
+	os.Setenv("SENTRY_SAMPLE_RATE", "0.8")
+	defer func() {
+		os.Unsetenv("DATABASE_URL")
+		os.Unsetenv("API_KEY")
+		os.Unsetenv("SENTRY_DSN")
+		os.Unsetenv("SENTRY_ENVIRONMENT")
+		os.Unsetenv("SENTRY_RELEASE")
+		os.Unsetenv("SENTRY_SAMPLE_RATE")
+	}()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	if cfg.SentryDSN != "https://test@sentry.io/123" {
+		t.Errorf("Expected SentryDSN 'https://test@sentry.io/123', got '%s'", cfg.SentryDSN)
+	}
+	if cfg.SentryEnvironment != "production" {
+		t.Errorf("Expected SentryEnvironment 'production', got '%s'", cfg.SentryEnvironment)
+	}
+	if cfg.SentryRelease != "v1.0.0" {
+		t.Errorf("Expected SentryRelease 'v1.0.0', got '%s'", cfg.SentryRelease)
+	}
+	if cfg.SentrySampleRate != 0.8 {
+		t.Errorf("Expected SentrySampleRate 0.8, got %f", cfg.SentrySampleRate)
+	}
+}
+
+func TestSentryValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		envVar  string
+		value   string
+		wantErr bool
+	}{
+		{"negative sample rate", "SENTRY_SAMPLE_RATE", "-0.1", true},
+		{"sample rate > 1", "SENTRY_SAMPLE_RATE", "1.5", true},
+		{"valid sample rate", "SENTRY_SAMPLE_RATE", "0.75", false},
+		{"zero sample rate", "SENTRY_SAMPLE_RATE", "0", false},
+		{"one sample rate", "SENTRY_SAMPLE_RATE", "1", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+			os.Setenv("API_KEY", "test-key")
+			os.Setenv(tt.envVar, tt.value)
+			defer func() {
+				os.Unsetenv("DATABASE_URL")
+				os.Unsetenv("API_KEY")
+				os.Unsetenv(tt.envVar)
+			}()
+
+			_, err := Load()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Load() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

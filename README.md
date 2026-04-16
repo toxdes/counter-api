@@ -12,6 +12,7 @@ A lightweight, high-performance HTTP API for managing multi-tenant counters desi
 - **Public operations** - Rate-limited counter access for direct browser calls
 - **CORS support** - First-class browser integration
 - **Structured logging** - JSON logs for easy aggregation
+- **Sentry integration** - Production-ready error tracking and monitoring
 - **Graceful shutdown** - Ensures data integrity on restart
 
 ## Quick Start
@@ -84,6 +85,7 @@ curl -X GET "http://localhost:8080/tenants/{tenant_id}/{counter_id}"
 
 - [API Documentation](docs/api.md) - Complete API reference with examples
 - [Deployment Guide](docs/deployment.md) - Production deployment and operations
+- [Sentry Integration](docs/sentry.md) - Error tracking and monitoring setup
 - [Design Spec](docs/superpowers/specs/2026-04-07-multi-tenant-counter-api-design.md) - Architecture and design decisions
 
 ## Development

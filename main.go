@@ -21,10 +21,20 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// Version is set at build time via ldflags
+var Version = "dev"
+
 func main() {
 	// Define CLI flags
+	versionFlag := flag.Bool("version", false, "Print version information")
 	migrateFlag := flag.String("db-migrate", "", "Run database migrations (up or down)")
 	flag.Parse()
+
+	// Handle version flag
+	if *versionFlag {
+		fmt.Printf("Counter API v %s\n", Version)
+		return
+	}
 
 	// Load .env file if present (for local development)
 	_ = godotenv.Load()
@@ -89,6 +99,17 @@ func main() {
 	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRequests, cfg.RateLimitGetMultiplier, cfg.RateLimitWindow)
 
 	logger := middleware.NewDefaultLogger(cfg.LogLevel)
+
+	// Initialize Sentry configuration
+	var sentryConfig *middleware.SentryConfig
+	if cfg.SentryDSN != "" {
+		sentryConfig = &middleware.SentryConfig{
+			DSN:         cfg.SentryDSN,
+			Environment: cfg.SentryEnvironment,
+			Release:     cfg.SentryRelease,
+			SampleRate:  cfg.SentrySampleRate,
+		}
+	}
 
 	// Start rate limiter cleanup goroutine
 	stopCleanup := make(chan struct{})
@@ -171,9 +192,9 @@ func main() {
 	// Create router
 	var r *router.Router
 	if cfg.CacheEnabled && cachedCounter != nil {
-		r = router.NewCachedRouter(db, cachedCounter, corsConfig, rateLimiter, cfg.APIKey, logger)
+		r = router.NewCachedRouter(db, cachedCounter, corsConfig, rateLimiter, cfg.APIKey, logger, sentryConfig)
 	} else {
-		r = router.NewRouter(db, corsConfig, rateLimiter, cfg.APIKey, logger)
+		r = router.NewRouter(db, corsConfig, rateLimiter, cfg.APIKey, logger, sentryConfig)
 	}
 
 	// Helper function to find last index of a byte in a string
