@@ -6,41 +6,41 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/valyala/fasthttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
 )
 
 func TestExtractContext(t *testing.T) {
 	tests := []struct {
-		name                string
-		path                string
-		expectedTenantID    string
-		expectedCounterID   string
+		name              string
+		path              string
+		expectedTenantID  string
+		expectedCounterID string
 	}{
 		{
-			name:                "full path with tenant and counter",
-			path:                "/tenants/abc123/counters/def456",
-			expectedTenantID:    "abc123",
-			expectedCounterID:   "def456",
+			name:              "full path with tenant and counter",
+			path:              "/tenants/abc123/counters/def456",
+			expectedTenantID:  "abc123",
+			expectedCounterID: "def456",
 		},
 		{
-			name:                "path with only tenant",
-			path:                "/tenants/abc123",
-			expectedTenantID:    "abc123",
-			expectedCounterID:   "",
+			name:              "path with only tenant",
+			path:              "/tenants/abc123",
+			expectedTenantID:  "abc123",
+			expectedCounterID: "",
 		},
 		{
-			name:                "path without tenant or counter",
-			path:                "/health",
-			expectedTenantID:    "",
-			expectedCounterID:   "",
+			name:              "path without tenant or counter",
+			path:              "/health",
+			expectedTenantID:  "",
+			expectedCounterID: "",
 		},
 		{
-			name:                "empty path",
-			path:                "",
-			expectedTenantID:    "",
-			expectedCounterID:   "",
+			name:              "empty path",
+			path:              "",
+			expectedTenantID:  "",
+			expectedCounterID: "",
 		},
 	}
 
