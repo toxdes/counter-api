@@ -19,6 +19,8 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/valyala/fasthttp"
+
+	"github.com/getsentry/sentry-go"
 )
 
 // Version is set at build time via ldflags
@@ -103,6 +105,29 @@ func main() {
 	// Initialize Sentry configuration
 	var sentryConfig *middleware.SentryConfig
 	if cfg.SentryDSN != "" {
+		// Determine release version
+		sentryRelease := cfg.SentryRelease
+		if sentryRelease == "" {
+			sentryRelease = Version // Use build-time version
+		}
+
+		// Initialize Sentry client
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:              cfg.SentryDSN,
+			Environment:      cfg.SentryEnvironment,
+			Release:          sentryRelease,
+			SampleRate:       cfg.SentrySampleRate,
+			TracesSampleRate: cfg.SentrySampleRate,
+		})
+		if err != nil {
+			log.Printf("Sentry initialization failed: %v", err)
+			log.Printf("Continuing without Sentry error tracking")
+		} else {
+			log.Printf("Sentry initialized (env=%s, release=%s, sample_rate=%.2f)",
+				cfg.SentryEnvironment, sentryRelease, cfg.SentrySampleRate)
+		}
+		defer sentry.Flush(2 * time.Second)
+
 		sentryConfig = &middleware.SentryConfig{
 			DSN:         cfg.SentryDSN,
 			Environment: cfg.SentryEnvironment,
