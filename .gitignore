@@ -1,5 +1,6 @@
 # Binaries
 counter
+docs-generator
 *.exe
 *.dll
 *.so
