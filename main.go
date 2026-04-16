@@ -21,10 +21,20 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// Version is set at build time via ldflags
+var Version = "dev"
+
 func main() {
 	// Define CLI flags
+	versionFlag := flag.Bool("version", false, "Print version information")
 	migrateFlag := flag.String("db-migrate", "", "Run database migrations (up or down)")
 	flag.Parse()
+
+	// Handle version flag
+	if *versionFlag {
+		fmt.Printf("Counter API v%s\n", Version)
+		return
+	}
 
 	// Load .env file if present (for local development)
 	_ = godotenv.Load()
