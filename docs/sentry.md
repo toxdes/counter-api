@@ -37,7 +37,7 @@ Sentry integration is controlled via environment variables:
 # Production Sentry setup
 SENTRY_DSN=https://examplePublicKey@o0.ingest.sentry.io/0
 SENTRY_ENVIRONMENT=production
-SENTRY_RELEASE=1.0.0
+SENTRY_RELEASE=1.0.3
 SENTRY_SAMPLE_RATE=0.3
 ```
 
@@ -147,7 +147,7 @@ Check your Sentry dashboard for captured events.
 ```bash
 SENTRY_DSN=https://yourPublicKey@o0.ingest.sentry.io/yourProjectID
 SENTRY_ENVIRONMENT=production
-SENTRY_RELEASE=1.0.0
+SENTRY_RELEASE=1.0.3
 SENTRY_SAMPLE_RATE=0.3
 ```
 
@@ -157,10 +157,10 @@ Build with version information:
 
 ```bash
 # Build with version
-go build -ldflags="-X main.Version=1.0.0" -o counter
+go build -ldflags="-X main.Version=1.0.3" -o counter
 
 # Set SENTRY_RELEASE to match
-export SENTRY_RELEASE=1.0.0
+export SENTRY_RELEASE=1.0.3
 ```
 
 ### 3. Adjust Sample Rate

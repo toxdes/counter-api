@@ -16,7 +16,7 @@ To include version information in the binary:
 VERSION=$(cat version.txt)
 go build -ldflags="-X 'main.Version=${VERSION}'" -o counter-api
 ./counter-api --version
-# Output: Counter API v1.0.0
+# Output: Counter API v1.0.3
 ```
 
 ## Docker Build
