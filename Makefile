@@ -4,24 +4,24 @@ VERSION ?= $(shell cat version.txt 2>/dev/null || echo "dev")
 LDFLAGS = -X 'main.Version=$(VERSION)'
 
 build:
-	go build -ldflags="$(LDFLAGS)" -o counter-api .
+	go build -ldflags="$(LDFLAGS)" -o counter .
 
 run: build
-	./counter-api
+	./counter
 
 test:
 	go test -v -race ./...
 
 migrate-up:
 	@echo "Running database migrations..."
-	./counter-api --db-migrate=up
+	./counter --db-migrate=up
 
 migrate-down:
 	@echo "Rolling back database migrations..."
-	./counter-api --db-migrate=down
+	./counter --db-migrate=down
 
 clean:
-	rm -f counter-api
+	rm -f counter
 	rm -f docs-generator
 	rm -f *.log
 

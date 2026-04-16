@@ -87,7 +87,7 @@ make run
 
 ### Production with systemd
 
-Create `/etc/systemd/system/counter-api.service`:
+Create `/etc/systemd/system/counter.service`:
 
 ```ini
 [Unit]
@@ -97,11 +97,11 @@ After=network.target postgresql.service
 [Service]
 Type=simple
 User=counterapi
-WorkingDirectory=/opt/counter-api
-ExecStart=/opt/counter-api/counter
+WorkingDirectory=/opt/counter
+ExecStart=/opt/counter/counter
 Restart=always
 RestartSec=5
-EnvironmentFile=/opt/counter-api/.env
+EnvironmentFile=/opt/counter/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -110,9 +110,9 @@ WantedBy=multi-user.target
 Enable and start:
 
 ```bash
-sudo systemctl enable counter-api
-sudo systemctl start counter-api
-sudo systemctl status counter-api
+sudo systemctl enable counter
+sudo systemctl start counter
+sudo systemctl status counter
 ```
 
 ### Production with Docker
@@ -140,8 +140,8 @@ CMD ["./counter"]
 Build and run:
 
 ```bash
-docker build -t counter-api .
-docker run -d -p 8080:8080 --env-file .env counter-api
+docker build -t counter .
+docker run -d -p 8080:8080 --env-file .env counter
 ```
 
 ## Production Checklist
@@ -171,8 +171,8 @@ docker run -d -p 8080:8080 --env-file .env counter-api
 
 Logs are output in JSON format. Send to:
 
-- **journald**: `./counter 2>&1 | systemd-cat -t counter-api`
-- **file**: `./counter 2>&1 | tee -a /var/log/counter-api.log`
+- **journald**: `./counter 2>&1 | systemd-cat -t counter`
+- **file**: `./counter 2>&1 | tee -a /var/log/counter.log`
 - **cloudwatch**: Install AWS CloudWatch agent
 
 ### Health Checks
