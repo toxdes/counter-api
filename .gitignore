@@ -13,6 +13,7 @@ docs-generator
 # Build artifacts
 *.o
 *.a
+internal/handlers/docs.html
 
 # Test files
 *.test
