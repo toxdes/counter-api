@@ -126,6 +126,9 @@ func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *
 		return c.Next()
 	})
 
+	// Serve API documentation on root path
+	router.Get("/", toHandler(handlers.DocsHandler))
+
 	// Admin endpoints (require API key)
 	router.Post("/tenants", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateTenantHandler(db))))
 
@@ -281,6 +284,9 @@ func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsCo
 		LoggingMiddleware(c, logger)
 		return c.Next()
 	})
+
+	// Serve API documentation on root path
+	router.Get("/", toHandler(handlers.DocsHandler))
 
 	// Admin endpoints (require API key)
 	router.Post("/tenants", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateTenantHandler(db))))

@@ -1,4 +1,4 @@
-.PHONY: build run test clean migrate-up migrate-down docs docs-generator version bump bump-minor bump-major help
+.PHONY: build run test clean migrate-up migrate-down docs version bump bump-minor bump-major help
 
 VERSION ?= $(shell cat version.txt 2>/dev/null || echo "dev")
 LDFLAGS = -X 'main.Version=$(VERSION)'
@@ -22,16 +22,12 @@ migrate-down:
 
 clean:
 	rm -f counter
-	rm -f docs-generator
 	rm -f *.log
 
-docs: docs-generator
-	@echo "Generating API documentation..."
-	./docs-generator
-
-docs-generator:
-	@echo "Building docs generator..."
-	go build -o docs-generator ./cmd/docs-generator
+docs:
+	@echo "Preparing API documentation..."
+	@sed -i "s|{{BASE_URL}}|https://counter-api.toxdes.com|g" docs/counter-api.html
+	@echo "Docs ready - BASE_URL replaced with https://counter-api.toxdes.com"
 
 version:
 	@echo "Counter API v$(VERSION)"
@@ -70,7 +66,7 @@ help:
 	@echo "  test         - Run tests"
 	@echo "  migrate-up   - Apply pending migrations"
 	@echo "  migrate-down - Rollback last migration"
-	@echo "  docs         - Generate HTML API documentation"
+	@echo "  docs         - Prepare API documentation (replace BASE_URL)"
 	@echo "  version      - Show application version"
 	@echo "  bump         - Bump patch version (1.0.3 → 1.0.4)"
 	@echo "  bump-minor   - Bump minor version (1.0.3 → 1.1.0)"
