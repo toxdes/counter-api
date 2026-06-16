@@ -91,6 +91,12 @@ type SetCounterValueRequest struct {
 	Value *int64 `json:"value"`
 }
 
+// ListCountersResponse represents the response for listing counters
+type ListCountersResponse struct {
+	Counters   []Counter `json:"counters"`
+	NextCursor *string   `json:"next_cursor"`
+}
+
 // Validate validates the set counter value request
 func (r *SetCounterValueRequest) Validate() error {
 	if r.Value == nil {
