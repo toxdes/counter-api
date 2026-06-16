@@ -1,0 +1,86 @@
+info:
+  name: List Counters
+  type: http
+  seq: 6
+
+http:
+  method: GET
+  url: "{{BASE_URL}}/tenants/{{tenant_id}}/counters"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: X-Api-Key
+      value: "{{API_KEY}}"
+  auth: inherit
+  query:
+    - name: limit
+      value: "20"
+      enabled: true
+    - name: cursor
+      value: ""
+      enabled: false
+
+runtime:
+  variables:
+    - name: tenant_id
+      value: 89117f78-50b0-42d6-abcf-74ecf82b279a
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  # List Counters
+
+  Lists all counters belonging to a tenant with cursor-based pagination.
+
+  **Authentication:** Requires API key via X-Api-Key header
+
+  **Rate Limit:** 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)
+
+  ## URL Parameters
+  - `tenant_id` (UUID, required): The unique identifier of the tenant
+
+  ## Query Parameters
+  - `limit` (integer, optional): Maximum number of counters to return (default: 20, max: 100)
+  - `cursor` (string, optional): Opaque pagination token from a previous response's `next_cursor`
+
+  ## Response (200 OK)
+  ```json
+  {
+    "counters": [
+      {
+        "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
+        "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+        "label": "page_views",
+        "value": 1523,
+        "max_delta": 50,
+        "created_at": "2026-04-08T10:30:00Z",
+        "updated_at": "2026-04-08T10:35:42Z"
+      }
+    ],
+    "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNC0wOFQxMDozNTo0MloiLCJpZCI6IjQxNTM3ODQyLWU0NjMtNDVhZi05YWM5LThlNDYzOWFhODVkMiJ9"
+  }
+  ```
+
+  ### Fields
+  - `counters` (array): List of counter objects for this tenant
+  - `next_cursor` (string, nullable): Opaque token for the next page. `null` when there are no more counters
+
+  ## Pagination
+  Use `limit` to control page size and pass the returned `next_cursor` as the `cursor` query parameter to retrieve the next page. The cursor is an opaque base64-encoded token — do not construct or modify it.
+
+  ## Errors
+  - 400 INVALID_UUID - Invalid tenant_id format
+  - 400 INVALID_PARAMETER - limit is not between 1 and 100
+  - 400 INVALID_CURSOR - Cursor is malformed
+  - 404 TENANT_NOT_FOUND - Tenant does not exist
+  - 401 UNAUTHORIZED - Missing or invalid API key
+  - 429 RATE_LIMIT_EXCEEDED - Too many requests
+
+  ## Examples
+  - First page (20 counters): `GET .../counters?limit=20`
+  - Next page: `GET .../counters?limit=20&cursor=<next_cursor_from_previous_response>`
+  - Custom page size: `GET .../counters?limit=50`
