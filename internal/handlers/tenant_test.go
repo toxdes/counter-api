@@ -117,6 +117,7 @@ func setupTestDB(t *testing.T) *database.DB {
 			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 			label TEXT NOT NULL,
 			value BIGINT NOT NULL DEFAULT 0,
+			max_delta BIGINT NOT NULL DEFAULT 50,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)
