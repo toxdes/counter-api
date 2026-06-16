@@ -3,8 +3,10 @@ package router
 import (
 	"counter/internal/database"
 	"counter/internal/middleware"
+	"os"
 	"testing"
 
+	"github.com/joho/godotenv"
 	"github.com/valyala/fasthttp"
 )
 
@@ -111,8 +113,15 @@ func TestPublicEndpointsNoAuth(t *testing.T) {
 
 // Helper functions
 func setupTestDB(t *testing.T) *database.DB {
+	_ = godotenv.Load()
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/counter_api_test?sslmode=disable"
+	}
+
 	cfg := &database.DBConfig{
-		DatabaseURL: "postgres://postgres:postgres@localhost:5432/counter_api_test?sslmode=disable",
+		DatabaseURL: dbURL,
 	}
 
 	db, err := database.NewDB(cfg)
