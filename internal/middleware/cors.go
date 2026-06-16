@@ -22,11 +22,9 @@ func CORS(config *CORSConfig) func(fasthttp.RequestHandler) fasthttp.RequestHand
 		return func(ctx *fasthttp.RequestCtx) {
 			origin := string(ctx.Request.Header.Peek("Origin"))
 
-			// Set CORS headers based on origin
 			if origin != "" {
-				allowedOrigin := getAllowedOrigin(origin, config.AllowedOrigins)
-				if allowedOrigin != "" {
-					ctx.Response.Header.Set("Access-Control-Allow-Origin", allowedOrigin)
+				if isOriginAllowed(origin, config.AllowedOrigins) {
+					ctx.Response.Header.Set("Access-Control-Allow-Origin", origin)
 				}
 			}
 
@@ -52,41 +50,16 @@ func CORS(config *CORSConfig) func(fasthttp.RequestHandler) fasthttp.RequestHand
 	}
 }
 
-// originMatches checks if the origin matches the allowed pattern
-func originMatches(origin, allowed string) bool {
-	if allowed == "*" {
+// isOriginAllowed checks if the origin is in the allowed origins list
+func isOriginAllowed(origin, allowedOrigins string) bool {
+	if allowedOrigins == "*" {
 		return true
 	}
-	if allowed == origin {
-		return true
-	}
-	// Check for wildcard subdomain (e.g., https://*.example.com)
-	wildcardIdx := strings.Index(allowed, "*.")
-	if wildcardIdx != -1 {
-		// Extract prefix (protocol) and suffix (domain)
-		prefix := allowed[:wildcardIdx]
-		suffix := allowed[wildcardIdx+2:] // Skip *.
-		if strings.HasPrefix(origin, prefix) && strings.HasSuffix(origin, suffix) {
-			// Ensure we're matching subdomain, not TLD
-			domain := origin[len(prefix) : len(origin)-len(suffix)]
-			return len(domain) > 0 && domain[len(domain)-1] == '.'
+
+	for _, allowed := range strings.Split(allowedOrigins, ",") {
+		if strings.TrimSpace(allowed) == origin {
+			return true
 		}
 	}
 	return false
-}
-
-// getAllowedOrigin finds the matching allowed origin for a given origin
-func getAllowedOrigin(origin, allowedOrigins string) string {
-	if allowedOrigins == "*" {
-		return "*"
-	}
-
-	origins := strings.Split(allowedOrigins, ",")
-	for _, allowed := range origins {
-		allowed = strings.TrimSpace(allowed)
-		if originMatches(origin, allowed) {
-			return allowed
-		}
-	}
-	return ""
 }
