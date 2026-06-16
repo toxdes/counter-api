@@ -61,6 +61,17 @@ func TestAdminEndpointsRequireAuth(t *testing.T) {
 	if ctx.Response.StatusCode() != fasthttp.StatusUnauthorized {
 		t.Errorf("Expected status 401 without auth, got %d", ctx.Response.StatusCode())
 	}
+
+	// Test GET /tenants/<id>/counters without auth
+	ctx2 := &fasthttp.RequestCtx{}
+	ctx2.Request.SetRequestURI("/tenants/00000000-0000-0000-0000-000000000000/counters")
+	ctx2.Request.Header.SetMethod("GET")
+
+	router.ServeHTTP(ctx2)
+
+	if ctx2.Response.StatusCode() != fasthttp.StatusUnauthorized {
+		t.Errorf("Expected status 401 for GET /tenants/<id>/counters without auth, got %d", ctx2.Response.StatusCode())
+	}
 }
 
 func TestPublicEndpointsNoAuth(t *testing.T) {
@@ -125,6 +136,7 @@ func setupTestDB(t *testing.T) *database.DB {
 			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 			label TEXT NOT NULL,
 			value BIGINT NOT NULL DEFAULT 0,
+			max_delta BIGINT NOT NULL DEFAULT 50,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)
