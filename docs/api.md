@@ -26,6 +26,8 @@ All requests should use `Content-Type: application/json` for request bodies.
 
 ### Admin Endpoints
 
+Admin endpoints require authentication via `X-API-Key` header.
+
 #### Create Tenant
 
 Creates a new tenant.
@@ -113,7 +115,77 @@ Content-Type: application/json
 }
 ```
 
+#### List Counters
+
+Lists all counters for a tenant with cursor-based pagination.
+
+**Request**
+
+```http
+GET /tenants/{tenant_id}/counters?limit=20&cursor={cursor}
+X-API-Key: your-api-key
+```
+
+Query parameters:
+- `limit` (optional): Number of counters per page. Defaults to `20`, max `100`.
+- `cursor` (optional): Opaque pagination token from a previous response's `next_cursor`. Leave empty for the first page.
+
+**Response**
+
+```http
+200 OK
+Content-Type: application/json
+
+{
+  "counters": [
+    {
+      "counter_id": "01912345-6789-7000-8000-000000000002",
+      "tenant_id": "01912345-6789-7000-8000-000000000001",
+      "label": "post_likes",
+      "value": 42,
+      "max_delta": 100,
+      "created_at": "2026-04-07T12:00:00Z",
+      "updated_at": "2026-04-07T12:01:00Z"
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0Ijoi..."
+}
+```
+
+`next_cursor` is `null` when all counters have been returned.
+
+#### Set Counter Value
+
+Sets a counter to a specific value. Requires API key.
+
+**Request**
+
+```http
+POST /tenants/{tenant_id}/counters/{counter_id}/set
+X-API-Key: your-api-key
+Content-Type: application/json
+
+{
+  "value": 100
+}
+```
+
+**Response**
+
+```http
+200 OK
+Content-Type: application/json
+
+{
+  "counter_id": "01912345-6789-7000-8000-000000000002",
+  "value": 100,
+  "updated_at": "2026-04-07T12:03:00Z"
+}
+```
+
 ### Public Endpoints
+
+Public endpoints do not require authentication.
 
 #### Get Tenant
 
@@ -210,32 +282,6 @@ Content-Type: application/json
 }
 ```
 
-#### Set Counter Value
-
-Sets a counter to a specific value.
-
-**Request**
-
-```http
-POST /tenants/{tenant_id}/{counter_id}/set?val=100
-```
-
-Query parameters:
-- `val` (required): Integer value to set.
-
-**Response**
-
-```http
-200 OK
-Content-Type: application/json
-
-{
-  "counter_id": "01912345-6789-7000-8000-000000000002",
-  "value": 100,
-  "updated_at": "2026-04-07T12:03:00Z"
-}
-```
-
 ## Error Codes
 
 | Code | Description |
@@ -243,12 +289,14 @@ Content-Type: application/json
 | `TENANT_NOT_FOUND` | Tenant does not exist |
 | `TENANT_LABEL_EXISTS` | Tenant label already taken |
 | `COUNTER_NOT_FOUND` | Counter does not exist |
+| `COUNTER_LABEL_EXISTS` | Counter label already exists for this tenant |
 | `RATE_LIMIT_EXCEEDED` | Rate limit exceeded |
-| `INVALID_API_KEY` | Invalid or missing API key |
+| `UNAUTHORIZED` | Invalid or missing API key |
 | `INVALID_JSON` | Malformed JSON in request body |
 | `INVALID_PARAMETER` | Invalid query or path parameter |
 | `INVALID_DELTA` | Delta must be a positive integer |
-| `INVALID_VALUE` | Value must be an integer |
+| `INVALID_UUID` | Invalid UUID format |
+| `INVALID_CURSOR` | Malformed pagination cursor |
 | `DELTA_EXCEEDS_MAXIMUM` | Increment delta exceeds the counter's max_delta value |
 
 ## Rate Limiting
@@ -256,7 +304,8 @@ Content-Type: application/json
 Public endpoints are rate-limited by IP address.
 
 **Default Limits**
-- 10 requests per 60 seconds per IP
+- 10 requests per 60 seconds per IP (POST)
+- 30 requests per 60 seconds per IP (GET)
 
 **Rate Limit Headers**
 
@@ -282,7 +331,7 @@ The API supports CORS for browser-based requests.
 
 Configure via `CORS_ALLOWED_ORIGINS` environment variable:
 - Exact match: `https://example.com`
-- Wildcard subdomains: `https://*.example.com`
+- Multiple origins: `https://app.example.com,https://admin.example.com`
 - Wildcard all: `*`
 
 **Example Browser Request**
