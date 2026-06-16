@@ -5,6 +5,7 @@ import (
 	"counter/internal/database"
 	"counter/internal/models"
 	"counter/internal/utils"
+	"encoding/base64"
 	"encoding/json"
 	"strconv"
 	"time"
@@ -281,6 +282,119 @@ func GetCounterHandler(db *database.DB) fasthttp.RequestHandler {
 		}
 
 		respondWithJSON(ctx, fasthttp.StatusOK, &counter)
+	}
+}
+
+type pageCursor struct {
+	CreatedAt string `json:"created_at"`
+	ID        string `json:"id"`
+}
+
+func encodePageCursor(c pageCursor) string {
+	data, _ := json.Marshal(c)
+	return base64.RawURLEncoding.EncodeToString(data)
+}
+
+func decodePageCursor(token string) (pageCursor, error) {
+	data, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return pageCursor{}, err
+	}
+	var c pageCursor
+	if err := json.Unmarshal(data, &c); err != nil {
+		return pageCursor{}, err
+	}
+	return c, nil
+}
+
+// ListCountersHandler handles listing counters for a tenant with cursor-based pagination
+func ListCountersHandler(db *database.DB) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		tenantID, ok := ctx.UserValue("tenant_id").(string)
+		if !ok || tenantID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "tenant_id is required")
+			return
+		}
+
+		if err := utils.ValidateUUID(tenantID); err != nil {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid tenant ID format")
+			return
+		}
+
+		var tenantExists bool
+		err := db.Get(&tenantExists, "SELECT EXISTS(SELECT 1 FROM tenants WHERE id = $1)", tenantID)
+		if err != nil || !tenantExists {
+			respondWithError(ctx, fasthttp.StatusNotFound, "TENANT_NOT_FOUND", "Tenant not found")
+			return
+		}
+
+		limit := 20
+		if limitStr := string(ctx.QueryArgs().Peek("limit")); limitStr != "" {
+			parsed, err := strconv.Atoi(limitStr)
+			if err != nil || parsed < 1 || parsed > 100 {
+				respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "limit must be between 1 and 100")
+				return
+			}
+			limit = parsed
+		}
+
+		var cursorTime time.Time
+		var cursorID string
+		hasCursor := false
+
+		if cursorStr := string(ctx.QueryArgs().Peek("cursor")); cursorStr != "" {
+			decoded, err := decodePageCursor(cursorStr)
+			if err != nil {
+				respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_CURSOR", "Invalid cursor format")
+				return
+			}
+			cursorTime, err = time.Parse(time.RFC3339Nano, decoded.CreatedAt)
+			if err != nil {
+				respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_CURSOR", "Invalid cursor timestamp")
+				return
+			}
+			cursorID = decoded.ID
+			hasCursor = true
+		}
+
+		var counters []models.Counter
+		if hasCursor {
+			err = db.Select(&counters, `
+				SELECT id, tenant_id, label, value, max_delta, created_at, updated_at
+				FROM counters
+				WHERE tenant_id = $1 AND (created_at, id) > ($2, $3)
+				ORDER BY created_at, id
+				LIMIT $4
+			`, tenantID, cursorTime, cursorID, limit+1)
+		} else {
+			err = db.Select(&counters, `
+				SELECT id, tenant_id, label, value, max_delta, created_at, updated_at
+				FROM counters
+				WHERE tenant_id = $1
+				ORDER BY created_at, id
+				LIMIT $2
+			`, tenantID, limit+1)
+		}
+		if err != nil {
+			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
+			return
+		}
+
+		resp := &models.ListCountersResponse{
+			Counters: counters,
+		}
+
+		if len(counters) > limit {
+			resp.Counters = counters[:limit]
+			last := counters[limit-1]
+			cursor := encodePageCursor(pageCursor{
+				CreatedAt: last.CreatedAt.Format(time.RFC3339Nano),
+				ID:        last.ID,
+			})
+			resp.NextCursor = &cursor
+		}
+
+		respondWithJSON(ctx, fasthttp.StatusOK, resp)
 	}
 }
 

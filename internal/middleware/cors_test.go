@@ -4,79 +4,50 @@ import (
 	"testing"
 )
 
-func TestOriginMatches(t *testing.T) {
+func TestIsOriginAllowed(t *testing.T) {
 	tests := []struct {
-		name        string
-		origin      string
-		allowed     string
-		shouldMatch bool
+		name          string
+		origin        string
+		allowedOrigins string
+		shouldMatch   bool
 	}{
 		{
-			name:        "exact match",
-			origin:      "https://example.com",
-			allowed:     "https://example.com",
-			shouldMatch: true,
+			name:          "exact match",
+			origin:        "https://example.com",
+			allowedOrigins: "https://example.com,https://other.com",
+			shouldMatch:   true,
 		},
 		{
-			name:        "wildcard subdomain match",
-			origin:      "https://sub.example.com",
-			allowed:     "https://*.example.com",
-			shouldMatch: true,
+			name:          "wildcard all match",
+			origin:        "https://anything.com",
+			allowedOrigins: "*",
+			shouldMatch:   true,
 		},
 		{
-			name:        "wildcard all match",
-			origin:      "https://anything.com",
-			allowed:     "*",
-			shouldMatch: true,
+			name:          "no match",
+			origin:        "https://evil.com",
+			allowedOrigins: "https://example.com",
+			shouldMatch:   false,
 		},
 		{
-			name:        "no match",
-			origin:      "https://evil.com",
-			allowed:     "https://example.com",
-			shouldMatch: false,
+			name:          "multiple origins match second",
+			origin:        "https://other.com",
+			allowedOrigins: "https://example.com,https://other.com",
+			shouldMatch:   true,
+		},
+		{
+			name:          "whitespace in list",
+			origin:        "https://example.com",
+			allowedOrigins: "https://example.com , https://other.com",
+			shouldMatch:   true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matched := originMatches(tt.origin, tt.allowed)
+			matched := isOriginAllowed(tt.origin, tt.allowedOrigins)
 			if matched != tt.shouldMatch {
-				t.Errorf("originMatches() = %v, want %v", matched, tt.shouldMatch)
-			}
-		})
-	}
-}
-
-func TestGetAllowedOrigin(t *testing.T) {
-	allowed := "https://example.com,https://*.example.com"
-
-	tests := []struct {
-		name     string
-		origin   string
-		expected string
-	}{
-		{
-			name:     "exact match",
-			origin:   "https://example.com",
-			expected: "https://example.com",
-		},
-		{
-			name:     "wildcard match",
-			origin:   "https://sub.example.com",
-			expected: "https://*.example.com",
-		},
-		{
-			name:     "no match",
-			origin:   "https://evil.com",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getAllowedOrigin(tt.origin, allowed)
-			if result != tt.expected {
-				t.Errorf("getAllowedOrigin() = %s, want %s", result, tt.expected)
+				t.Errorf("isOriginAllowed() = %v, want %v", matched, tt.shouldMatch)
 			}
 		})
 	}

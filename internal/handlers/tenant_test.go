@@ -4,8 +4,10 @@ import (
 	"counter/internal/database"
 	"counter/internal/models"
 	"encoding/json"
+	"os"
 	"testing"
 
+	"github.com/joho/godotenv"
 	"github.com/valyala/fasthttp"
 )
 
@@ -92,8 +94,15 @@ func TestGetTenantNotFound(t *testing.T) {
 
 // Helper functions
 func setupTestDB(t *testing.T) *database.DB {
+	_ = godotenv.Load()
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/counter_api_test?sslmode=disable"
+	}
+
 	cfg := &database.DBConfig{
-		DatabaseURL: "postgres://postgres:postgres@localhost:5432/counter_api_test?sslmode=disable",
+		DatabaseURL: dbURL,
 	}
 
 	db, err := database.NewDB(cfg)
@@ -117,6 +126,7 @@ func setupTestDB(t *testing.T) *database.DB {
 			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 			label TEXT NOT NULL,
 			value BIGINT NOT NULL DEFAULT 0,
+			max_delta BIGINT NOT NULL DEFAULT 50,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)

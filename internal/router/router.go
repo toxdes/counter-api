@@ -134,6 +134,7 @@ func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *
 
 	// Tenant endpoints
 	router.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantHandler(db)))
+	router.Get("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.ListCountersHandler(db))))
 	router.Post("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateCounterHandler(db))))
 
 	// Counter endpoints
@@ -293,6 +294,7 @@ func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsCo
 
 	// Tenant endpoints
 	router.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantHandler(db)))
+	router.Get("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.ListCountersHandler(db))))
 	router.Post("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateCounterHandler(db))))
 
 	// Counter endpoints - use cached handlers
