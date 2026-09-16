@@ -11,8 +11,10 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("not found")
-	ErrConflict = errors.New("conflict")
+	ErrNotFound        = errors.New("not found")
+	ErrTenantNotFound  = errors.New("tenant not found")
+	ErrCounterNotFound = errors.New("counter not found")
+	ErrConflict        = errors.New("conflict")
 )
 
 // TenantRepository is the persistence boundary required by TenantService.

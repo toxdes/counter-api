@@ -69,6 +69,7 @@ func toHandler(handler fasthttp.RequestHandler) routing.Handler {
 // NewRouter creates a new router with all routes and middleware
 func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger, sentryConfig *middleware.SentryConfig) *Router {
 	tenantService := service.NewTenantService(store.NewTenantStore(db))
+	counterService := service.NewCounterService(store.NewCounterStore(db))
 
 	// Create router
 	router := routing.New()
@@ -138,11 +139,11 @@ func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *
 
 	// Tenant endpoints
 	router.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantServiceHandler(tenantService)))
-	router.Get("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.ListCountersHandler(db))))
-	router.Post("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateCounterHandler(db))))
+	router.Get("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.ListCountersServiceHandler(counterService))))
+	router.Post("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateCounterServiceHandler(counterService))))
 
 	// Counter endpoints
-	router.Get("/tenants/<tenant_id>/counters/<counter_id>", toHandler(handlers.GetCounterHandler(db)))
+	router.Get("/tenants/<tenant_id>/counters/<counter_id>", toHandler(handlers.GetCounterServiceHandler(counterService)))
 	router.Post("/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(handlers.IncrementCounterHandler(db)))
 	router.Post("/tenants/<tenant_id>/counters/<counter_id>/set", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.SetCounterValueHandler(db))))
 
@@ -210,6 +211,9 @@ func isTrustedProxy(ip net.IP) bool {
 
 // NewCachedRouter creates a new router with caching enabled
 func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger, sentryConfig *middleware.SentryConfig) *Router {
+	tenantService := service.NewTenantService(store.NewTenantStore(db))
+	counterService := service.NewCounterService(store.NewCounterStore(db))
+
 	// Create router
 	router := routing.New()
 
@@ -276,12 +280,12 @@ func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsCo
 	router.Get("/", toHandler(handlers.DocsHandler))
 
 	// Admin endpoints (require API key)
-	router.Post("/tenants", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateTenantHandler(db))))
+	router.Post("/tenants", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateTenantServiceHandler(tenantService))))
 
 	// Tenant endpoints
-	router.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantHandler(db)))
-	router.Get("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.ListCountersHandler(db))))
-	router.Post("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateCounterHandler(db))))
+	router.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantServiceHandler(tenantService)))
+	router.Get("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.ListCountersServiceHandler(counterService))))
+	router.Post("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateCounterServiceHandler(counterService))))
 
 	// Counter endpoints - use cached handlers
 	router.Get("/tenants/<tenant_id>/counters/<counter_id>", toHandler(handlers.CachedGetCounterHandler(cachedCounter)))

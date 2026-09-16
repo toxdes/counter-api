@@ -12,8 +12,10 @@ import (
 )
 
 var (
-	ErrTenantNotFound = errors.New("tenant not found")
-	ErrTenantConflict = errors.New("tenant label already exists")
+	ErrTenantNotFound  = errors.New("tenant not found")
+	ErrTenantConflict  = errors.New("tenant label already exists")
+	ErrCounterNotFound = errors.New("counter not found")
+	ErrCounterConflict = errors.New("counter label already exists")
 )
 
 // TenantStore contains PostgreSQL persistence for tenant operations.

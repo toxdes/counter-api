@@ -17,6 +17,12 @@ type Counter struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
+// CounterCursor identifies the last counter in a cursor-paginated page.
+type CounterCursor struct {
+	CreatedAt time.Time
+	ID        string
+}
+
 // Validate validates the counter data
 func (c *Counter) Validate() error {
 	if c == nil {

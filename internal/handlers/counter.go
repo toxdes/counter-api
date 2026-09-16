@@ -1,16 +1,19 @@
 package handlers
 
 import (
+	"context"
 	"counter/internal/cache"
 	"counter/internal/database"
 	"counter/internal/models"
+	"counter/internal/service"
+	"counter/internal/store"
 	"counter/internal/utils"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 )
 
@@ -20,20 +23,21 @@ const (
 
 // CreateCounterHandler handles counter creation requests
 func CreateCounterHandler(db *database.DB) fasthttp.RequestHandler {
+	return CreateCounterServiceHandler(service.NewCounterService(store.NewCounterStore(db)))
+}
+
+// CreateCounterServiceHandler handles counter creation through the counter service boundary.
+func CreateCounterServiceHandler(counterService service.CounterService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		tenantID := ctx.UserValue("tenant_id").(string)
+		tenantID, ok := ctx.UserValue("tenant_id").(string)
+		if !ok || tenantID == "" {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", "tenant_id is required")
+			return
+		}
 
 		// Validate UUID format
 		if err := utils.ValidateUUID(tenantID); err != nil {
 			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid tenant ID format")
-			return
-		}
-
-		// Verify tenant exists
-		var tenantExists bool
-		err := db.Get(&tenantExists, "SELECT EXISTS(SELECT 1 FROM tenants WHERE id = $1)", tenantID)
-		if err != nil || !tenantExists {
-			respondWithError(ctx, fasthttp.StatusNotFound, "TENANT_NOT_FOUND", "Tenant not found")
 			return
 		}
 
@@ -48,39 +52,18 @@ func CreateCounterHandler(db *database.DB) fasthttp.RequestHandler {
 			return
 		}
 
-		// Check if label already exists for this tenant
-		var labelExists bool
-		err = db.Get(&labelExists, "SELECT EXISTS(SELECT 1 FROM counters WHERE tenant_id = $1 AND label = $2)", tenantID, req.Label)
-		if err != nil {
-			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
+		counter, err := counterService.Create(context.Background(), tenantID, req)
+		if errors.Is(err, service.ErrTenantNotFound) {
+			respondWithError(ctx, fasthttp.StatusNotFound, "TENANT_NOT_FOUND", "Tenant not found")
 			return
 		}
-		if labelExists {
+		if errors.Is(err, service.ErrConflict) {
 			respondWithError(ctx, fasthttp.StatusConflict, "COUNTER_LABEL_EXISTS", "A counter with this label already exists for this tenant")
 			return
 		}
-
-		// Create counter
-		counterID := uuid.New().String()
-		now := time.Now().UTC()
-
-		_, err = db.Exec(
-			"INSERT INTO counters (id, tenant_id, label, value, max_delta, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-			counterID, tenantID, req.Label, req.InitialValue, req.MaxDelta, now, now,
-		)
 		if err != nil {
 			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to create counter")
 			return
-		}
-
-		counter := &models.Counter{
-			ID:        counterID,
-			TenantID:  tenantID,
-			Label:     req.Label,
-			Value:     req.InitialValue,
-			MaxDelta:  req.MaxDelta,
-			CreatedAt: now,
-			UpdatedAt: now,
 		}
 
 		respondWithJSON(ctx, fasthttp.StatusCreated, counter)
@@ -247,6 +230,11 @@ func SetCounterValueHandler(db *database.DB) fasthttp.RequestHandler {
 
 // GetCounterHandler handles counter retrieval requests
 func GetCounterHandler(db *database.DB) fasthttp.RequestHandler {
+	return GetCounterServiceHandler(service.NewCounterService(store.NewCounterStore(db)))
+}
+
+// GetCounterServiceHandler handles counter retrieval through the counter service boundary.
+func GetCounterServiceHandler(counterService service.CounterService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		tenantID, ok := ctx.UserValue("tenant_id").(string)
 		if !ok || tenantID == "" {
@@ -270,18 +258,17 @@ func GetCounterHandler(db *database.DB) fasthttp.RequestHandler {
 			return
 		}
 
-		var counter models.Counter
-		err := db.Get(
-			&counter,
-			"SELECT id, tenant_id, label, value, max_delta, created_at, updated_at FROM counters WHERE id = $1 AND tenant_id = $2",
-			counterID, tenantID,
-		)
-		if err != nil {
+		counter, err := counterService.Get(context.Background(), tenantID, counterID)
+		if errors.Is(err, service.ErrCounterNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
 			return
 		}
+		if err != nil {
+			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
+			return
+		}
 
-		respondWithJSON(ctx, fasthttp.StatusOK, &counter)
+		respondWithJSON(ctx, fasthttp.StatusOK, counter)
 	}
 }
 
@@ -309,6 +296,11 @@ func decodePageCursor(token string) (pageCursor, error) {
 
 // ListCountersHandler handles listing counters for a tenant with cursor-based pagination
 func ListCountersHandler(db *database.DB) fasthttp.RequestHandler {
+	return ListCountersServiceHandler(service.NewCounterService(store.NewCounterStore(db)))
+}
+
+// ListCountersServiceHandler handles counter listing through the counter service boundary.
+func ListCountersServiceHandler(counterService service.CounterService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		tenantID, ok := ctx.UserValue("tenant_id").(string)
 		if !ok || tenantID == "" {
@@ -318,13 +310,6 @@ func ListCountersHandler(db *database.DB) fasthttp.RequestHandler {
 
 		if err := utils.ValidateUUID(tenantID); err != nil {
 			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_UUID", "Invalid tenant ID format")
-			return
-		}
-
-		var tenantExists bool
-		err := db.Get(&tenantExists, "SELECT EXISTS(SELECT 1 FROM tenants WHERE id = $1)", tenantID)
-		if err != nil || !tenantExists {
-			respondWithError(ctx, fasthttp.StatusNotFound, "TENANT_NOT_FOUND", "Tenant not found")
 			return
 		}
 
@@ -357,23 +342,14 @@ func ListCountersHandler(db *database.DB) fasthttp.RequestHandler {
 			hasCursor = true
 		}
 
-		var counters []models.Counter
+		var cursor *service.CounterCursor
 		if hasCursor {
-			err = db.Select(&counters, `
-				SELECT id, tenant_id, label, value, max_delta, created_at, updated_at
-				FROM counters
-				WHERE tenant_id = $1 AND (created_at, id) > ($2, $3)
-				ORDER BY created_at, id
-				LIMIT $4
-			`, tenantID, cursorTime, cursorID, limit+1)
-		} else {
-			err = db.Select(&counters, `
-				SELECT id, tenant_id, label, value, max_delta, created_at, updated_at
-				FROM counters
-				WHERE tenant_id = $1
-				ORDER BY created_at, id
-				LIMIT $2
-			`, tenantID, limit+1)
+			cursor = &service.CounterCursor{CreatedAt: cursorTime, ID: cursorID}
+		}
+		page, err := counterService.List(context.Background(), tenantID, cursor, limit)
+		if errors.Is(err, service.ErrTenantNotFound) {
+			respondWithError(ctx, fasthttp.StatusNotFound, "TENANT_NOT_FOUND", "Tenant not found")
+			return
 		}
 		if err != nil {
 			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
@@ -381,12 +357,11 @@ func ListCountersHandler(db *database.DB) fasthttp.RequestHandler {
 		}
 
 		resp := &models.ListCountersResponse{
-			Counters: counters,
+			Counters: page.Counters,
 		}
 
-		if len(counters) > limit {
-			resp.Counters = counters[:limit]
-			last := counters[limit-1]
+		if page.Next != nil {
+			last := page.Next
 			cursor := encodePageCursor(pageCursor{
 				CreatedAt: last.CreatedAt.Format(time.RFC3339Nano),
 				ID:        last.ID,
