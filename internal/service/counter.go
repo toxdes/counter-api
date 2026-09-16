@@ -19,12 +19,20 @@ type CounterPage struct {
 	Next     *CounterCursor
 }
 
+type CounterMutationResult struct {
+	CounterID string
+	Value     int64
+	UpdatedAt time.Time
+}
+
 // CounterRepository is the persistence boundary required by CounterService.
 type CounterRepository interface {
 	TenantExists(context.Context, string) (bool, error)
 	CreateCounter(context.Context, *models.Counter) error
 	GetCounter(context.Context, string, string) (*models.Counter, error)
 	ListCounters(context.Context, string, *CounterCursor, int) ([]models.Counter, error)
+	IncrementCounter(context.Context, string, string, int64, time.Time) (int64, error)
+	SetCounterValue(context.Context, string, string, int64, time.Time) error
 }
 
 // CounterService contains counter read and creation use cases independent of
@@ -33,6 +41,8 @@ type CounterService interface {
 	Create(context.Context, string, models.CreateCounterRequest) (*models.Counter, error)
 	Get(context.Context, string, string) (*models.Counter, error)
 	List(context.Context, string, *CounterCursor, int) (CounterPage, error)
+	Increment(context.Context, string, string, int64) (*CounterMutationResult, error)
+	Set(context.Context, string, string, int64) (*CounterMutationResult, error)
 }
 
 type counterService struct {
@@ -112,4 +122,35 @@ func (s *counterService) List(ctx context.Context, tenantID string, cursor *Coun
 		page.Next = &CounterCursor{CreatedAt: last.CreatedAt, ID: last.ID}
 	}
 	return page, nil
+}
+
+func (s *counterService) Increment(ctx context.Context, tenantID, counterID string, delta int64) (*CounterMutationResult, error) {
+	counter, err := s.Get(ctx, tenantID, counterID)
+	if err != nil {
+		return nil, err
+	}
+	if delta > counter.MaxDelta {
+		return nil, ErrDeltaExceedsMaximum
+	}
+
+	now := s.now()
+	value, err := s.repository.IncrementCounter(ctx, tenantID, counterID, delta, now)
+	if errors.Is(err, store.ErrCounterNotFound) {
+		return nil, ErrCounterNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &CounterMutationResult{CounterID: counterID, Value: value, UpdatedAt: now}, nil
+}
+
+func (s *counterService) Set(ctx context.Context, tenantID, counterID string, value int64) (*CounterMutationResult, error) {
+	now := s.now()
+	if err := s.repository.SetCounterValue(ctx, tenantID, counterID, value, now); err != nil {
+		if errors.Is(err, store.ErrCounterNotFound) {
+			return nil, ErrCounterNotFound
+		}
+		return nil, err
+	}
+	return &CounterMutationResult{CounterID: counterID, Value: value, UpdatedAt: now}, nil
 }

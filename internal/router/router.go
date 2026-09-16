@@ -144,8 +144,8 @@ func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *
 
 	// Counter endpoints
 	router.Get("/tenants/<tenant_id>/counters/<counter_id>", toHandler(handlers.GetCounterServiceHandler(counterService)))
-	router.Post("/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(handlers.IncrementCounterHandler(db)))
-	router.Post("/tenants/<tenant_id>/counters/<counter_id>/set", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.SetCounterValueHandler(db))))
+	router.Post("/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(handlers.IncrementCounterServiceHandler(counterService)))
+	router.Post("/tenants/<tenant_id>/counters/<counter_id>/set", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.SetCounterServiceHandler(counterService))))
 
 	// OPTIONS catch-all handler for CORS preflight requests
 	// Must be before NotFound handler to intercept unmatched OPTIONS requests

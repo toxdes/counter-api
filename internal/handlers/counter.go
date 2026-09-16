@@ -72,6 +72,11 @@ func CreateCounterServiceHandler(counterService service.CounterService) fasthttp
 
 // IncrementCounterHandler handles counter increment requests
 func IncrementCounterHandler(db *database.DB) fasthttp.RequestHandler {
+	return IncrementCounterServiceHandler(service.NewCounterService(store.NewCounterStore(db)))
+}
+
+// IncrementCounterServiceHandler handles increments through the counter service boundary.
+func IncrementCounterServiceHandler(counterService service.CounterService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		tenantID, ok := ctx.UserValue("tenant_id").(string)
 		if !ok || tenantID == "" {
@@ -106,41 +111,15 @@ func IncrementCounterHandler(db *database.DB) fasthttp.RequestHandler {
 			delta = parsed
 		}
 
-		// Verify counter exists and belongs to tenant
-		var exists bool
-		err := db.Get(&exists, "SELECT EXISTS(SELECT 1 FROM counters WHERE id = $1 AND tenant_id = $2)", counterID, tenantID)
-		if err != nil || !exists {
+		result, err := counterService.Increment(context.Background(), tenantID, counterID, delta)
+		if errors.Is(err, service.ErrCounterNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
 			return
 		}
-
-		// Fetch counter with max_delta to validate
-		var counterData struct {
-			MaxDelta int64 `db:"max_delta"`
-		}
-		err = db.Get(
-			&counterData,
-			"SELECT max_delta FROM counters WHERE id = $1 AND tenant_id = $2",
-			counterID, tenantID,
-		)
-		if err != nil {
-			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
-			return
-		}
-
-		// Validate delta doesn't exceed max_delta
-		if delta > counterData.MaxDelta {
+		if errors.Is(err, service.ErrDeltaExceedsMaximum) {
 			respondWithError(ctx, fasthttp.StatusBadRequest, ErrorCodeDeltaExceedsMaximum, "Delta exceeds maximum allowed value")
 			return
 		}
-
-		// Increment counter and get new value
-		now := time.Now().UTC()
-		var newValue int64
-		err = db.QueryRow(
-			"UPDATE counters SET value = value + $1, updated_at = $2 WHERE id = $3 RETURNING value",
-			delta, now, counterID,
-		).Scan(&newValue)
 		if err != nil {
 			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to increment counter")
 			return
@@ -148,8 +127,8 @@ func IncrementCounterHandler(db *database.DB) fasthttp.RequestHandler {
 
 		resp := &models.IncrementResponse{
 			CounterID: counterID,
-			Value:     newValue,
-			UpdatedAt: now,
+			Value:     result.Value,
+			UpdatedAt: result.UpdatedAt,
 		}
 
 		respondWithJSON(ctx, fasthttp.StatusOK, resp)
@@ -158,6 +137,11 @@ func IncrementCounterHandler(db *database.DB) fasthttp.RequestHandler {
 
 // SetCounterValueHandler handles counter value set requests
 func SetCounterValueHandler(db *database.DB) fasthttp.RequestHandler {
+	return SetCounterServiceHandler(service.NewCounterService(store.NewCounterStore(db)))
+}
+
+// SetCounterServiceHandler handles counter value changes through the counter service boundary.
+func SetCounterServiceHandler(counterService service.CounterService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		tenantID, ok := ctx.UserValue("tenant_id").(string)
 		if !ok || tenantID == "" {
@@ -199,20 +183,11 @@ func SetCounterValueHandler(db *database.DB) fasthttp.RequestHandler {
 			return
 		}
 
-		// Verify counter exists and belongs to tenant
-		var exists bool
-		err := db.Get(&exists, "SELECT EXISTS(SELECT 1 FROM counters WHERE id = $1 AND tenant_id = $2)", counterID, tenantID)
-		if err != nil || !exists {
+		result, err := counterService.Set(context.Background(), tenantID, counterID, *req.Value)
+		if errors.Is(err, service.ErrCounterNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
 			return
 		}
-
-		// Set counter value
-		now := time.Now().UTC()
-		_, err = db.Exec(
-			"UPDATE counters SET value = $1, updated_at = $2 WHERE id = $3",
-			*req.Value, now, counterID,
-		)
 		if err != nil {
 			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to set counter value")
 			return
@@ -220,8 +195,8 @@ func SetCounterValueHandler(db *database.DB) fasthttp.RequestHandler {
 
 		resp := &models.SetValueResponse{
 			CounterID: counterID,
-			Value:     *req.Value,
-			UpdatedAt: now,
+			Value:     result.Value,
+			UpdatedAt: result.UpdatedAt,
 		}
 
 		respondWithJSON(ctx, fasthttp.StatusOK, resp)

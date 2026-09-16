@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/lib/pq"
 )
@@ -88,4 +89,40 @@ func (s *CounterStore) ListCounters(ctx context.Context, tenantID string, cursor
 		return nil, fmt.Errorf("list counters: %w", err)
 	}
 	return counters, nil
+}
+
+func (s *CounterStore) IncrementCounter(ctx context.Context, tenantID, counterID string, delta int64, now time.Time) (int64, error) {
+	var value int64
+	err := s.db.QueryRowxContext(ctx, `
+		UPDATE counters
+		SET value = value + $1, updated_at = $2
+		WHERE tenant_id = $3 AND id = $4
+		RETURNING value
+	`, delta, now, tenantID, counterID).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrCounterNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("increment counter: %w", err)
+	}
+	return value, nil
+}
+
+func (s *CounterStore) SetCounterValue(ctx context.Context, tenantID, counterID string, value int64, now time.Time) error {
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE counters
+		SET value = $1, updated_at = $2
+		WHERE tenant_id = $3 AND id = $4
+	`, value, now, tenantID, counterID)
+	if err != nil {
+		return fmt.Errorf("set counter value: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check set counter value: %w", err)
+	}
+	if rows == 0 {
+		return ErrCounterNotFound
+	}
+	return nil
 }
