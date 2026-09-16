@@ -78,6 +78,25 @@ GOOS=darwin GOARCH=amd64 go build -o counter .
 GOOS=windows GOARCH=amd64 go build -o counter.exe .
 ```
 
+## Testing
+
+Run the normal unit and package tests with:
+
+```bash
+make test
+```
+
+PostgreSQL-backed integration tests use the real embedded migrations and an
+isolated schema. Configure `TEST_DATABASE_URL` (or `DATABASE_URL`) and run:
+
+```bash
+make test-integration
+```
+
+The integration target fails when PostgreSQL is unavailable, making it suitable
+for a CI gate. Local `go test` runs may skip those tests when no test database
+is configured.
+
 ## Running
 
 ### Development

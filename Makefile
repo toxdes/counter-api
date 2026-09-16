@@ -1,4 +1,4 @@
-.PHONY: build run test clean migrate-up migrate-down docs version bump bump-minor bump-major help
+.PHONY: build run test test-integration clean migrate-up migrate-down docs version bump bump-minor bump-major help
 
 VERSION ?= $(shell cat version.txt 2>/dev/null || echo "dev")
 LDFLAGS = -X 'main.Version=$(VERSION)'
@@ -11,6 +11,10 @@ run: build
 
 test:
 	go test -v -race ./...
+	go vet ./...
+
+test-integration:
+	COUNTER_REQUIRE_POSTGRES=1 go test -v -race ./internal/testutil ./internal/handlers ./internal/router
 
 migrate-up:
 	@echo "Running database migrations..."
@@ -65,6 +69,7 @@ help:
 	@echo "  build        - Build the application with version injection"
 	@echo "  run          - Build and run the application"
 	@echo "  test         - Run tests"
+	@echo "  test-integration - Run PostgreSQL-backed tests (requires PostgreSQL)"
 	@echo "  migrate-up   - Apply pending migrations"
 	@echo "  migrate-down - Rollback last migration"
 	@echo "  docs         - Prepare API documentation (embed in binary)"
