@@ -1,18 +1,24 @@
 package handlers
 
 import (
+	"context"
 	"counter/internal/database"
 	"counter/internal/models"
+	"counter/internal/service"
+	"counter/internal/store"
 	"counter/internal/utils"
 	"encoding/json"
-	"time"
-
-	"github.com/google/uuid"
+	"errors"
 	"github.com/valyala/fasthttp"
 )
 
 // CreateTenantHandler handles tenant creation requests
 func CreateTenantHandler(db *database.DB) fasthttp.RequestHandler {
+	return CreateTenantServiceHandler(service.NewTenantService(store.NewTenantStore(db)))
+}
+
+// CreateTenantServiceHandler handles tenant creation through the tenant service boundary.
+func CreateTenantServiceHandler(tenantService service.TenantService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		var req models.CreateTenantRequest
 		if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
@@ -25,37 +31,14 @@ func CreateTenantHandler(db *database.DB) fasthttp.RequestHandler {
 			return
 		}
 
-		// Check if label already exists
-		var exists bool
-		err := db.Get(&exists, "SELECT EXISTS(SELECT 1 FROM tenants WHERE label = $1)", req.Label)
-		if err != nil {
-			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
-			return
-		}
-
-		if exists {
+		tenant, err := tenantService.Create(context.Background(), req.Label)
+		if errors.Is(err, service.ErrConflict) {
 			respondWithError(ctx, fasthttp.StatusConflict, "TENANT_LABEL_EXISTS", "A tenant with this label already exists")
 			return
 		}
-
-		// Create tenant
-		tenantID := uuid.New().String()
-		now := time.Now().UTC()
-
-		_, err = db.Exec(
-			"INSERT INTO tenants (id, label, created_at, updated_at) VALUES ($1, $2, $3, $4)",
-			tenantID, req.Label, now, now,
-		)
 		if err != nil {
 			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to create tenant")
 			return
-		}
-
-		tenant := &models.Tenant{
-			ID:        tenantID,
-			Label:     req.Label,
-			CreatedAt: now,
-			UpdatedAt: now,
 		}
 
 		respondWithJSON(ctx, fasthttp.StatusCreated, tenant)
@@ -64,6 +47,11 @@ func CreateTenantHandler(db *database.DB) fasthttp.RequestHandler {
 
 // GetTenantHandler handles tenant retrieval requests
 func GetTenantHandler(db *database.DB) fasthttp.RequestHandler {
+	return GetTenantServiceHandler(service.NewTenantService(store.NewTenantStore(db)))
+}
+
+// GetTenantServiceHandler handles tenant retrieval through the tenant service boundary.
+func GetTenantServiceHandler(tenantService service.TenantService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		tenantID, ok := ctx.UserValue("tenant_id").(string)
 		if !ok || tenantID == "" {
@@ -77,14 +65,13 @@ func GetTenantHandler(db *database.DB) fasthttp.RequestHandler {
 			return
 		}
 
-		var tenant models.Tenant
-		err := db.Get(
-			&tenant,
-			"SELECT id, label, created_at, updated_at FROM tenants WHERE id = $1",
-			tenantID,
-		)
-		if err != nil {
+		tenant, err := tenantService.Get(context.Background(), tenantID)
+		if errors.Is(err, service.ErrNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "TENANT_NOT_FOUND", "Tenant not found")
+			return
+		}
+		if err != nil {
+			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
 			return
 		}
 

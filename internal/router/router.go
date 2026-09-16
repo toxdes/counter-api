@@ -5,6 +5,8 @@ import (
 	"counter/internal/database"
 	"counter/internal/handlers"
 	"counter/internal/middleware"
+	"counter/internal/service"
+	"counter/internal/store"
 	"net"
 	"strconv"
 	"strings"
@@ -66,6 +68,8 @@ func toHandler(handler fasthttp.RequestHandler) routing.Handler {
 
 // NewRouter creates a new router with all routes and middleware
 func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger, sentryConfig *middleware.SentryConfig) *Router {
+	tenantService := service.NewTenantService(store.NewTenantStore(db))
+
 	// Create router
 	router := routing.New()
 
@@ -130,10 +134,10 @@ func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *
 	router.Get("/", toHandler(handlers.DocsHandler))
 
 	// Admin endpoints (require API key)
-	router.Post("/tenants", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateTenantHandler(db))))
+	router.Post("/tenants", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateTenantServiceHandler(tenantService))))
 
 	// Tenant endpoints
-	router.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantHandler(db)))
+	router.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantServiceHandler(tenantService)))
 	router.Get("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.ListCountersHandler(db))))
 	router.Post("/tenants/<tenant_id>/counters", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateCounterHandler(db))))
 
