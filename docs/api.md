@@ -18,6 +18,17 @@ X-API-Key: your-secret-api-key-here
 
 Public endpoints do not require authentication but are rate-limited.
 
+## API Versioning and Compatibility
+
+The existing unversioned routes are V1 and remain supported for backward
+compatibility. V1 accepts an optional `Idempotency-Key`; clients that provide a
+valid UUID receive idempotency protection once the durable mutation path is
+enabled. Requests without a key remain supported, but transport retries cannot
+be proven to represent the same logical mutation.
+
+Contract changes that require stricter behavior are introduced under `/v2`.
+See [the V2 API reference](api-v2.md).
+
 ### Making Requests
 
 All requests should use `Content-Type: application/json` for request bodies.
@@ -246,6 +257,7 @@ Increments a counter by a specified delta.
 
 ```http
 POST /tenants/{tenant_id}/{counter_id}/inc?delta=5
+Idempotency-Key: 01912345-6789-7000-8000-000000000003 (optional)
 ```
 
 Query parameters:
@@ -298,6 +310,9 @@ Content-Type: application/json
 | `INVALID_UUID` | Invalid UUID format |
 | `INVALID_CURSOR` | Malformed pagination cursor |
 | `DELTA_EXCEEDS_MAXIMUM` | Increment delta exceeds the counter's max_delta value |
+| `IDEMPOTENCY_KEY_REQUIRED` | V2 mutation is missing the required idempotency key |
+| `INVALID_IDEMPOTENCY_KEY` | Idempotency key is not a valid UUID |
+| `IDEMPOTENCY_KEY_REUSED` | Idempotency key was reused with different request data |
 
 ## Rate Limiting
 
