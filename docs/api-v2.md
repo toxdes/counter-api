@@ -73,7 +73,7 @@ An exact retry returns the same result with `replayed: true`.
 
 The V2 set operation uses the same mandatory idempotency key and durable
 operation contract. It records an audited adjustment from the current value to
-the requested value; it does not bypass the mutation ledger.
+the requested value; it does not bypass the mutation history.
 
 ```http
 POST /v2/tenants/{tenant_id}/counters/{counter_id}/set

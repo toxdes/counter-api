@@ -10,8 +10,8 @@ func TestEmbeddedMigrationHistoryIsCanonicalAndPaired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("discover migrations: %v", err)
 	}
-	if len(files) != 5 {
-		t.Fatalf("expected five canonical migrations, got %d", len(files))
+	if len(files) != 6 {
+		t.Fatalf("expected six canonical migrations, got %d", len(files))
 	}
 
 	for index, file := range files {
@@ -28,6 +28,9 @@ func TestEmbeddedMigrationHistoryIsCanonicalAndPaired(t *testing.T) {
 	}
 	if !strings.Contains(files[3].up, "tenant_id, created_at, id") {
 		t.Fatal("version 4 does not define the counter pagination index")
+	}
+	if !strings.Contains(files[4].up, "opening_balance") || !strings.Contains(files[5].up, "initial_value") {
+		t.Fatal("operation kind history does not migrate to initial_value")
 	}
 }
 

@@ -1,4 +1,4 @@
--- Make counter ownership structural for the operation ledger foreign key.
+-- Make counter ownership structural for the operation history foreign key.
 ALTER TABLE counters
     ADD CONSTRAINT counters_tenant_id_id_unique UNIQUE (tenant_id, id);
 
@@ -25,7 +25,7 @@ CREATE TABLE counter_operations (
 CREATE INDEX idx_counter_operations_history
     ON counter_operations (tenant_id, counter_id, created_at DESC, operation_id DESC);
 
--- Give existing counters a deterministic, repeatable opening operation.
+-- Give existing counters a deterministic, repeatable initial-value operation.
 INSERT INTO counter_operations (
     tenant_id, counter_id, operation_id, kind, delta, request_hash,
     value_before, value_after, metadata, state, created_at, completed_at

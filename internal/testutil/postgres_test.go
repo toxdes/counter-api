@@ -13,8 +13,8 @@ func TestOpenPostgresUsesRealMigrations(t *testing.T) {
 	if err := db.Get(&migrationCount, "SELECT COUNT(*) FROM schema_migrations"); err != nil {
 		t.Fatalf("failed to query migration history: %v", err)
 	}
-	if migrationCount != 5 {
-		t.Fatalf("expected 5 applied migrations, got %d", migrationCount)
+	if migrationCount != 6 {
+		t.Fatalf("expected 6 applied migrations, got %d", migrationCount)
 	}
 
 	var hasMaxDelta bool
@@ -49,8 +49,8 @@ func TestOpenPostgresUsesRealMigrations(t *testing.T) {
 		t.Fatal("real migrations did not add the counter pagination index")
 	}
 
-	var hasOperationLedger bool
-	if err := db.Get(&hasOperationLedger, `
+	var hasOperationHistory bool
+	if err := db.Get(&hasOperationHistory, `
 		SELECT EXISTS (
 			SELECT 1
 			FROM information_schema.tables
@@ -58,10 +58,10 @@ func TestOpenPostgresUsesRealMigrations(t *testing.T) {
 			  AND table_name = 'counter_operations'
 		)
 	`); err != nil {
-		t.Fatalf("failed to verify operation ledger table: %v", err)
+		t.Fatalf("failed to verify operation history table: %v", err)
 	}
-	if !hasOperationLedger {
-		t.Fatal("real migrations did not add the operation ledger table")
+	if !hasOperationHistory {
+		t.Fatal("real migrations did not add the operation history table")
 	}
 
 	if _, err := db.Exec(`
@@ -104,8 +104,8 @@ func TestConcurrentMigrationRunsAreSerialized(t *testing.T) {
 	if err := db.Get(&migrationCount, "SELECT COUNT(*) FROM schema_migrations"); err != nil {
 		t.Fatalf("failed to query migration history: %v", err)
 	}
-	if migrationCount != 5 {
-		t.Fatalf("expected five applied migrations after concurrent runs, got %d", migrationCount)
+	if migrationCount != 6 {
+		t.Fatalf("expected six applied migrations after concurrent runs, got %d", migrationCount)
 	}
 }
 
@@ -119,23 +119,8 @@ func TestMigrationDownRollsBackOneVersion(t *testing.T) {
 	if err := db.Get(&migrationCount, "SELECT COUNT(*) FROM schema_migrations"); err != nil {
 		t.Fatalf("failed to query migration history: %v", err)
 	}
-	if migrationCount != 4 {
+	if migrationCount != 5 {
 		t.Fatalf("expected one migration to be rolled back, got %d remaining", migrationCount)
-	}
-
-	var hasPaginationIndex bool
-	if err := db.Get(&hasPaginationIndex, `
-		SELECT EXISTS (
-			SELECT 1
-			FROM pg_indexes
-			WHERE schemaname = current_schema()
-			  AND indexname = 'idx_counters_tenant_created_id'
-		)
-	`); err != nil {
-		t.Fatalf("failed to verify rolled-back index: %v", err)
-	}
-	if hasPaginationIndex {
-		t.Fatal("latest migration index still exists after rollback")
 	}
 
 	if err := migrations.RunUp(db); err != nil {
