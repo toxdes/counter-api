@@ -24,7 +24,8 @@ GRANT ALL PRIVILEGES ON DATABASE counter_api TO counter_user;
 Create `.env` file:
 
 ```bash
-SERVER_HOST=0.0.0.0
+# The API binds locally by default; expose it through nginx instead.
+SERVER_HOST=127.0.0.1
 SERVER_PORT=8080
 
 DB_HOST=localhost
@@ -143,6 +144,10 @@ Build and run:
 docker build -t counter .
 docker run -d -p 8080:8080 --env-file .env counter
 ```
+
+When the API is running inside a container, set `SERVER_HOST=0.0.0.0` in the
+container environment so the published port or a sidecar nginx can reach it.
+Keep the default `127.0.0.1` for a host-level deployment behind nginx.
 
 ## Production Checklist
 

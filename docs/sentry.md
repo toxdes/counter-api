@@ -14,9 +14,9 @@ The Counter API integrates with Sentry for production-ready error tracking and p
 ## Features
 
 - Automatic error capture for 5xx server errors
-- Rate limit error tracking (429 status codes)
+- Structured rate-limit monitoring outside Sentry error events
 - Panic recovery and reporting
-- Request context tracking (tenant_id, counter_id, client IP)
+- Request context tracking (tenant_id, counter_id, canonical client IP)
 - Performance monitoring
 - Configurable sampling rate to manage costs
 
@@ -46,9 +46,8 @@ SENTRY_SAMPLE_RATE=0.3
 ### Always Logged
 
 - **5xx Server Errors**: All internal server errors (500-599)
-- **429 Rate Limit Errors**: Rate limit exceeded errors
 - **Panics**: Unhandled panics in request handlers
-- **Request Context**: Tenant ID, counter ID, client IP, method, path
+- **Request Context**: Tenant ID, counter ID, canonical client IP, method, path
 - **Response Context**: Status codes for errors
 
 ### Never Logged
@@ -56,7 +55,8 @@ SENTRY_SAMPLE_RATE=0.3
 - **4xx Client Errors**: Bad requests (400-428, 430-499) are not captured
 - **Successful Requests**: 2xx and 3xx status codes
 - **Sensitive Data**: API keys, passwords, or sensitive request bodies
-- **Request Bodies**: Payload content is not captured
+- **Request Bodies and Queries**: Payloads, query strings, cookies, and sensitive headers are scrubbed
+- **429 Rate Limits**: Not captured as Sentry error events; monitor them through metrics and logs
 
 ## Error Isolation
 
@@ -136,7 +136,7 @@ Check your Sentry dashboard for captured events.
 
 # Verify Sentry is receiving events
 # - Look for HTTP 500 errors in Sentry Issues
-# - Check for rate limit (429) events
+# - 429 responses are intentionally not sent as Sentry error events
 # - Verify tenant_id and counter_id tags appear
 ```
 
@@ -174,7 +174,7 @@ For high-traffic production environments:
 
 - Check Sentry dashboard for error trends
 - Set up alerts for spike in 5xx errors
-- Monitor 429 rate limit events for capacity planning
+- Monitor 429 metrics/logs for capacity planning
 - Track panic recovery events
 
 ## Troubleshooting
@@ -242,7 +242,7 @@ Request → Sentry Handler → Extract Context → Configure Scope → Call Next
 
 ```
 Status Code >= 500 → Capture as server error
-Status Code == 429 → Capture as rate limit error
+Status Code == 429 → Return rate-limit response; do not capture as Sentry error
 Status Code < 500 → Don't capture (client errors)
 Panic → Capture panic + set 500 status
 ```
@@ -258,7 +258,7 @@ Request Path → Parse tenant_id and counter_id → Set as tags → Add to user 
 1. **Always set SENTRY_ENVIRONMENT**: Differentiate staging, production, dev
 2. **Use release tracking**: Match SENTRY_RELEASE to your version
 3. **Sample appropriately**: Start low (0.1), increase as needed
-4. **Monitor 429 errors**: These indicate rate limit issues
+4. **Monitor 429 metrics/logs**: These indicate rate limit pressure without polluting error events
 5. **Set up alerts**: Get notified of error spikes
 6. **Test locally**: Verify integration before deploying
 7. **Keep DSN secure**: Use secrets management in production

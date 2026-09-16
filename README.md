@@ -109,8 +109,9 @@ make clean    # Clean build artifacts
 The API includes an optional in-memory LRU cache for high-performance counter operations:
 
 ```bash
-# Enable/disable cache (default: true)
-CACHE_ENABLED=true
+# Enable/disable cache (default: false)
+# Keep disabled until the asynchronous write-behind path is removed.
+CACHE_ENABLED=false
 
 # Maximum number of counters to cache (default: 1000)
 CACHE_SIZE=1000
@@ -118,10 +119,10 @@ CACHE_SIZE=1000
 # Cache entry TTL in seconds (default: 300)
 CACHE_TTL_SECONDS=300
 
-# Number of background workers for async writes (default: 2)
+# Number of background workers for async writes (default: 2; legacy cache path)
 CACHE_WORKERS=2
 
-# Write queue size (default: 10000)
+# Write queue size (default: 10000; legacy cache path)
 CACHE_QUEUE_SIZE=10000
 
 # Graceful shutdown wait time in seconds (default: 5)
