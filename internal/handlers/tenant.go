@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"counter/internal/database"
 	"counter/internal/models"
 	"counter/internal/service"
@@ -31,13 +30,13 @@ func CreateTenantServiceHandler(tenantService service.TenantService) fasthttp.Re
 			return
 		}
 
-		tenant, err := tenantService.Create(context.Background(), req.Label)
+		tenant, err := tenantService.Create(requestDatabaseContext(ctx), req.Label)
 		if errors.Is(err, service.ErrConflict) {
 			respondWithError(ctx, fasthttp.StatusConflict, "TENANT_LABEL_EXISTS", "A tenant with this label already exists")
 			return
 		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to create tenant")
+			respondWithServiceError(ctx, err, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to create tenant")
 			return
 		}
 
@@ -65,13 +64,13 @@ func GetTenantServiceHandler(tenantService service.TenantService) fasthttp.Reque
 			return
 		}
 
-		tenant, err := tenantService.Get(context.Background(), tenantID)
+		tenant, err := tenantService.Get(requestDatabaseContext(ctx), tenantID)
 		if errors.Is(err, service.ErrNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "TENANT_NOT_FOUND", "Tenant not found")
 			return
 		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
+			respondWithServiceError(ctx, err, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
 			return
 		}
 

@@ -14,9 +14,24 @@ type Config struct {
 	ServerPort int
 
 	// Database
-	DatabaseURL    string
-	DBMaxOpenConns int
-	DBMaxIdleConns int
+	DatabaseURL                string
+	DBMaxOpenConns             int
+	DBMaxIdleConns             int
+	DBMaxIdleTime              int
+	DBTimeoutMS                int
+	DBStatementTimeoutMS       int
+	DBLockTimeoutMS            int
+	DBIdleTransactionTimeoutMS int
+
+	// Request and server protection
+	RequestReadTimeoutSeconds     int
+	RequestMutationTimeoutSeconds int
+	ServerReadTimeoutSeconds      int
+	ServerWriteTimeoutSeconds     int
+	ServerIdleTimeoutSeconds      int
+	ServerConcurrency             int
+	ServerMaxConnsPerIP           int
+	MaxRequestBodyBytes           int
 
 	// Security
 	APIKey              string
@@ -56,9 +71,23 @@ func Load() (*Config, error) {
 		ServerHost: getEnv("SERVER_HOST", "127.0.0.1"),
 		ServerPort: getEnvInt("SERVER_PORT", 8080),
 
-		DatabaseURL:    getEnv("DATABASE_URL", ""),
-		DBMaxOpenConns: getEnvInt("DB_MAX_OPEN_CONNS", 25),
-		DBMaxIdleConns: getEnvInt("DB_MAX_IDLE_CONNS", 5),
+		DatabaseURL:                getEnv("DATABASE_URL", ""),
+		DBMaxOpenConns:             getEnvInt("DB_MAX_OPEN_CONNS", 25),
+		DBMaxIdleConns:             getEnvInt("DB_MAX_IDLE_CONNS", 5),
+		DBMaxIdleTime:              getEnvInt("DB_MAX_IDLE_TIME_SECONDS", 300),
+		DBTimeoutMS:                getEnvInt("DB_TIMEOUT_MS", 2000),
+		DBStatementTimeoutMS:       getEnvInt("DB_STATEMENT_TIMEOUT_MS", 2000),
+		DBLockTimeoutMS:            getEnvInt("DB_LOCK_TIMEOUT_MS", 500),
+		DBIdleTransactionTimeoutMS: getEnvInt("DB_IDLE_TRANSACTION_TIMEOUT_MS", 10000),
+
+		RequestReadTimeoutSeconds:     getEnvInt("REQUEST_READ_TIMEOUT_SECONDS", 5),
+		RequestMutationTimeoutSeconds: getEnvInt("REQUEST_MUTATION_TIMEOUT_SECONDS", 10),
+		ServerReadTimeoutSeconds:      getEnvInt("SERVER_READ_TIMEOUT_SECONDS", 10),
+		ServerWriteTimeoutSeconds:     getEnvInt("SERVER_WRITE_TIMEOUT_SECONDS", 10),
+		ServerIdleTimeoutSeconds:      getEnvInt("SERVER_IDLE_TIMEOUT_SECONDS", 30),
+		ServerConcurrency:             getEnvInt("SERVER_CONCURRENCY", 128),
+		ServerMaxConnsPerIP:           getEnvInt("SERVER_MAX_CONNS_PER_IP", 100),
+		MaxRequestBodyBytes:           getEnvInt("MAX_REQUEST_BODY_BYTES", 64*1024),
 
 		APIKey: getEnv("API_KEY", ""),
 		// Keep the environment key enabled by default for V1 compatibility.
@@ -90,6 +119,30 @@ func Load() (*Config, error) {
 	}
 	if cfg.APIKey == "" {
 		return nil, fmt.Errorf("missing required API_KEY")
+	}
+	if cfg.DBMaxOpenConns < 1 {
+		return nil, fmt.Errorf("DB_MAX_OPEN_CONNS must be at least 1")
+	}
+	if cfg.DBMaxIdleConns < 0 || cfg.DBMaxIdleConns > cfg.DBMaxOpenConns {
+		return nil, fmt.Errorf("DB_MAX_IDLE_CONNS must be between 0 and DB_MAX_OPEN_CONNS")
+	}
+	if cfg.DBMaxIdleTime < 1 {
+		return nil, fmt.Errorf("DB_MAX_IDLE_TIME_SECONDS must be at least 1")
+	}
+	if cfg.DBTimeoutMS < 1 || cfg.DBStatementTimeoutMS < 1 || cfg.DBLockTimeoutMS < 1 || cfg.DBIdleTransactionTimeoutMS < 1 {
+		return nil, fmt.Errorf("database timeout settings must be positive")
+	}
+	if cfg.RequestReadTimeoutSeconds < 1 || cfg.RequestMutationTimeoutSeconds < 1 {
+		return nil, fmt.Errorf("request timeout settings must be positive")
+	}
+	if cfg.ServerReadTimeoutSeconds < 1 || cfg.ServerWriteTimeoutSeconds < 1 || cfg.ServerIdleTimeoutSeconds < 1 {
+		return nil, fmt.Errorf("server timeout settings must be positive")
+	}
+	if cfg.ServerConcurrency < 1 || cfg.ServerMaxConnsPerIP < 1 {
+		return nil, fmt.Errorf("server concurrency settings must be positive")
+	}
+	if cfg.MaxRequestBodyBytes < 1 {
+		return nil, fmt.Errorf("MAX_REQUEST_BODY_BYTES must be positive")
 	}
 	if cfg.RateLimitGetMultiplier < 1 {
 		return nil, fmt.Errorf("RATE_LIMIT_GET_MULTIPLIER must be at least 1")

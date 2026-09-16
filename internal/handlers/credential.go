@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"counter/internal/middleware"
 	"counter/internal/models"
 	"counter/internal/service"
@@ -32,13 +31,13 @@ func CreateCredentialServiceHandler(credentialService service.CredentialService)
 			}
 		}
 		actorID := principalID(ctx)
-		credential, err := credentialService.Create(context.Background(), tenantID, request.Scopes, request.ExpiresAt, actorID)
+		credential, err := credentialService.Create(requestDatabaseContext(ctx), tenantID, request.Scopes, request.ExpiresAt, actorID)
 		if errors.Is(err, service.ErrTenantNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "TENANT_NOT_FOUND", "Tenant not found")
 			return
 		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", err.Error())
+			respondWithServiceError(ctx, err, fasthttp.StatusBadRequest, "INVALID_PARAMETER", err.Error())
 			return
 		}
 		respondWithJSON(ctx, fasthttp.StatusCreated, credential)
@@ -54,9 +53,9 @@ func CreateAdminCredentialServiceHandler(credentialService service.CredentialSer
 				return
 			}
 		}
-		credential, err := credentialService.CreateAdmin(context.Background(), request.Scopes, request.ExpiresAt, principalID(ctx))
+		credential, err := credentialService.CreateAdmin(requestDatabaseContext(ctx), request.Scopes, request.ExpiresAt, principalID(ctx))
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_PARAMETER", err.Error())
+			respondWithServiceError(ctx, err, fasthttp.StatusBadRequest, "INVALID_PARAMETER", err.Error())
 			return
 		}
 		respondWithJSON(ctx, fasthttp.StatusCreated, credential)
@@ -69,13 +68,13 @@ func RotateCredentialServiceHandler(credentialService service.CredentialService)
 		if !ok {
 			return
 		}
-		credential, err := credentialService.Rotate(context.Background(), tenantID, credentialID, principalID(ctx))
+		credential, err := credentialService.Rotate(requestDatabaseContext(ctx), tenantID, credentialID, principalID(ctx))
 		if errors.Is(err, service.ErrCredentialNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "CREDENTIAL_NOT_FOUND", "Credential not found")
 			return
 		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Credential service is temporarily unavailable")
+			respondWithServiceError(ctx, err, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Credential service is temporarily unavailable")
 			return
 		}
 		respondWithJSON(ctx, fasthttp.StatusCreated, credential)
@@ -88,11 +87,11 @@ func RevokeCredentialServiceHandler(credentialService service.CredentialService)
 		if !ok {
 			return
 		}
-		if err := credentialService.Revoke(context.Background(), tenantID, credentialID, principalID(ctx)); errors.Is(err, service.ErrCredentialNotFound) {
+		if err := credentialService.Revoke(requestDatabaseContext(ctx), tenantID, credentialID, principalID(ctx)); errors.Is(err, service.ErrCredentialNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "CREDENTIAL_NOT_FOUND", "Credential not found")
 			return
 		} else if err != nil {
-			respondWithError(ctx, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Credential service is temporarily unavailable")
+			respondWithServiceError(ctx, err, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Credential service is temporarily unavailable")
 			return
 		}
 		ctx.SetStatusCode(fasthttp.StatusNoContent)

@@ -50,9 +50,13 @@ func main() {
 
 	// Initialize database
 	dbCfg := &database.DBConfig{
-		DatabaseURL:  cfg.DatabaseURL,
-		MaxOpenConns: cfg.DBMaxOpenConns,
-		MaxIdleConns: cfg.DBMaxIdleConns,
+		DatabaseURL:            cfg.DatabaseURL,
+		MaxOpenConns:           cfg.DBMaxOpenConns,
+		MaxIdleConns:           cfg.DBMaxIdleConns,
+		ConnMaxIdleTime:        time.Duration(cfg.DBMaxIdleTime) * time.Second,
+		StatementTimeout:       time.Duration(cfg.DBStatementTimeoutMS) * time.Millisecond,
+		LockTimeout:            time.Duration(cfg.DBLockTimeoutMS) * time.Millisecond,
+		IdleTransactionTimeout: time.Duration(cfg.DBIdleTransactionTimeoutMS) * time.Millisecond,
 	}
 
 	db, err := database.NewDB(dbCfg)
@@ -173,7 +177,21 @@ func main() {
 	}()
 
 	// Create router
-	r := router.NewRouterWithOptions(db, corsConfig, rateLimiter, cfg.APIKey, cfg.LegacyAPIKeyEnabled, logger, sentryConfig)
+	r := router.NewRouterWithTimeouts(
+		db,
+		corsConfig,
+		rateLimiter,
+		cfg.APIKey,
+		cfg.LegacyAPIKeyEnabled,
+		logger,
+		sentryConfig,
+		middleware.RouteTimeouts{
+			Read:     time.Duration(cfg.RequestReadTimeoutSeconds) * time.Second,
+			Mutation: time.Duration(cfg.RequestMutationTimeoutSeconds) * time.Second,
+			Database: time.Duration(cfg.DBTimeoutMS) * time.Millisecond,
+		},
+		cfg.ServerConcurrency,
+	)
 
 	// Helper function to find last index of a byte in a string
 
@@ -181,9 +199,12 @@ func main() {
 	server := &fasthttp.Server{
 		Handler:            r.ServeHTTP,
 		Name:               "Counter API",
-		ReadTimeout:        time.Second * 10,
-		WriteTimeout:       time.Second * 10,
-		MaxRequestBodySize: 1 * 1024 * 1024, // 1MB max request body
+		ReadTimeout:        time.Duration(cfg.ServerReadTimeoutSeconds) * time.Second,
+		WriteTimeout:       time.Duration(cfg.ServerWriteTimeoutSeconds) * time.Second,
+		IdleTimeout:        time.Duration(cfg.ServerIdleTimeoutSeconds) * time.Second,
+		Concurrency:        cfg.ServerConcurrency,
+		MaxConnsPerIP:      cfg.ServerMaxConnsPerIP,
+		MaxRequestBodySize: cfg.MaxRequestBodyBytes,
 	}
 
 	// Start server in goroutine

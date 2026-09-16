@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"counter/internal/contract"
 	"counter/internal/models"
 	"counter/internal/service"
@@ -58,13 +57,13 @@ func OperationHistoryServiceHandlerVersioned(historyService service.OperationHis
 			return
 		}
 
-		page, err := historyService.List(context.Background(), tenantID, counterID, cursor, limit)
+		page, err := historyService.List(requestDatabaseContext(ctx), tenantID, counterID, cursor, limit)
 		if errors.Is(err, service.ErrCounterNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
 			return
 		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Counter service is temporarily unavailable")
+			respondWithServiceError(ctx, err, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Counter service is temporarily unavailable")
 			return
 		}
 

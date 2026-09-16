@@ -40,6 +40,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.RateLimitRequests != 10 {
 		t.Errorf("Expected RateLimitRequests default 10, got %d", cfg.RateLimitRequests)
 	}
+	if cfg.DBTimeoutMS != 2000 || cfg.MaxRequestBodyBytes != 64*1024 {
+		t.Errorf("Expected safe timeout/body defaults, got DBTimeoutMS=%d MaxRequestBodyBytes=%d", cfg.DBTimeoutMS, cfg.MaxRequestBodyBytes)
+	}
 }
 
 func TestLoadFromEnv(t *testing.T) {
@@ -110,6 +113,23 @@ func TestLegacyCacheSettingsAreIgnoredForCompatibility(t *testing.T) {
 	_, err := Load()
 	if err != nil {
 		t.Fatalf("legacy cache settings must not affect Load(): %v", err)
+	}
+}
+
+func TestLoadRejectsInvalidPoolAndTimeoutSettings(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("DB_MAX_OPEN_CONNS", "2")
+	t.Setenv("DB_MAX_IDLE_CONNS", "3")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected DB_MAX_IDLE_CONNS greater than DB_MAX_OPEN_CONNS to fail")
+	}
+
+	t.Setenv("DB_MAX_IDLE_CONNS", "1")
+	t.Setenv("DB_TIMEOUT_MS", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected zero DB timeout to fail")
 	}
 }
 

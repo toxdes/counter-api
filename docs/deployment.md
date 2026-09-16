@@ -36,6 +36,20 @@ DB_NAME=counter_api
 DB_SSL_MODE=disable
 DB_MAX_OPEN_CONNS=25
 DB_MAX_IDLE_CONNS=5
+DB_MAX_IDLE_TIME_SECONDS=300
+DB_TIMEOUT_MS=2000
+DB_STATEMENT_TIMEOUT_MS=2000
+DB_LOCK_TIMEOUT_MS=500
+DB_IDLE_TRANSACTION_TIMEOUT_MS=10000
+
+REQUEST_READ_TIMEOUT_SECONDS=5
+REQUEST_MUTATION_TIMEOUT_SECONDS=10
+SERVER_READ_TIMEOUT_SECONDS=10
+SERVER_WRITE_TIMEOUT_SECONDS=10
+SERVER_IDLE_TIMEOUT_SECONDS=30
+SERVER_CONCURRENCY=128
+SERVER_MAX_CONNS_PER_IP=100
+MAX_REQUEST_BODY_BYTES=65536
 
 API_KEY=your-random-secure-api-key-here
 LEGACY_API_KEY_ENABLED=true
@@ -67,6 +81,31 @@ and revoked through the V2 credential endpoints. Set
 to managed credentials; keep it enabled during the compatibility period. To
 disable it safely, first provision a managed administrator credential through
 `POST /v2/admin/credentials`.
+
+The request timeout is route-class based: reads default to five seconds and
+mutations to ten seconds. Database operations receive a two-second budget,
+while PostgreSQL also enforces statement, lock, and idle-transaction
+timeouts. Keep `DB_MAX_OPEN_CONNS` within the database's global connection
+budget when running more than one API replica; each replica's pool is additive.
+The default 64 KiB body limit is intentionally sized for the JSON API rather
+than file uploads.
+
+Choose pool and concurrency values as a deployment profile, rather than
+copying the defaults to every host:
+
+| Profile | `DB_MAX_OPEN_CONNS` | `DB_MAX_IDLE_CONNS` | `SERVER_CONCURRENCY` | Intended use |
+| --- | ---: | ---: | ---: | --- |
+| Small VPS | 5 | 2 | 32 | 1 vCPU / 512 MiB host |
+| Standard | 25 | 5 | 128 | Dedicated API instance |
+| Replica set | Budget globally | Budget globally | 128+ | Multiple API instances sharing PostgreSQL |
+
+For a replica set, divide the PostgreSQL connection budget across all API
+instances and leave headroom for migrations, reconciliation, and operators.
+
+The API rejects saturated in-process work with `503 SERVICE_OVERLOADED` and a
+`Retry-After` header. Client quota exhaustion remains `429
+RATE_LIMIT_EXCEEDED`. Nginx buffers request bodies and applies its own body,
+connection, and upstream timeout limits before forwarding to Go.
 
 ### 3. Run Migrations
 

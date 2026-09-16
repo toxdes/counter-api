@@ -122,7 +122,8 @@ func AuthenticateRequest(authenticator *APIKeyAuthenticator) func(fasthttp.Reque
 				next(ctx)
 				return
 			}
-			principal, err := authenticator.Authenticate(context.Background(), apiKey)
+			databaseContext, _ := DatabaseContextFromRequest(ctx)
+			principal, err := authenticator.Authenticate(databaseContext, apiKey)
 			if err != nil {
 				if errors.Is(err, ErrCredentialUnavailable) {
 					ctx.SetStatusCode(fasthttp.StatusServiceUnavailable)

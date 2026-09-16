@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"counter/internal/contract"
 	"counter/internal/database"
 	"counter/internal/models"
@@ -53,7 +52,7 @@ func CreateCounterServiceHandler(counterService service.CounterService) fasthttp
 			return
 		}
 
-		counter, err := counterService.Create(context.Background(), tenantID, req)
+		counter, err := counterService.Create(requestDatabaseContext(ctx), tenantID, req)
 		if errors.Is(err, service.ErrTenantNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "TENANT_NOT_FOUND", "Tenant not found")
 			return
@@ -63,7 +62,7 @@ func CreateCounterServiceHandler(counterService service.CounterService) fasthttp
 			return
 		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to create counter")
+			respondWithServiceError(ctx, err, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to create counter")
 			return
 		}
 
@@ -132,14 +131,14 @@ func IncrementCounterServiceHandlerVersioned(counterService service.CounterServi
 		var err error
 		if attributable, ok := counterService.(service.AttributableCounterService); ok {
 			if idempotencyKey == "" {
-				result, err = attributable.IncrementWithActor(context.Background(), tenantID, counterID, delta, principalID(ctx))
+				result, err = attributable.IncrementWithActor(requestDatabaseContext(ctx), tenantID, counterID, delta, principalID(ctx))
 			} else {
-				result, err = attributable.IncrementWithOperationActor(context.Background(), tenantID, counterID, delta, idempotencyKey, principalID(ctx))
+				result, err = attributable.IncrementWithOperationActor(requestDatabaseContext(ctx), tenantID, counterID, delta, idempotencyKey, principalID(ctx))
 			}
 		} else if idempotencyKey == "" {
-			result, err = counterService.Increment(context.Background(), tenantID, counterID, delta)
+			result, err = counterService.Increment(requestDatabaseContext(ctx), tenantID, counterID, delta)
 		} else {
-			result, err = counterService.IncrementWithOperation(context.Background(), tenantID, counterID, delta, idempotencyKey)
+			result, err = counterService.IncrementWithOperation(requestDatabaseContext(ctx), tenantID, counterID, delta, idempotencyKey)
 		}
 		if errors.Is(err, service.ErrCounterNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
@@ -162,7 +161,7 @@ func IncrementCounterServiceHandlerVersioned(counterService service.CounterServi
 			return
 		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Counter service is temporarily unavailable")
+			respondWithServiceError(ctx, err, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Counter service is temporarily unavailable")
 			return
 		}
 
@@ -247,14 +246,14 @@ func SetCounterServiceHandlerVersioned(counterService service.CounterService, ve
 		var err error
 		if attributable, ok := counterService.(service.AttributableCounterService); ok {
 			if idempotencyKey == "" {
-				result, err = attributable.SetWithActor(context.Background(), tenantID, counterID, *req.Value, principalID(ctx))
+				result, err = attributable.SetWithActor(requestDatabaseContext(ctx), tenantID, counterID, *req.Value, principalID(ctx))
 			} else {
-				result, err = attributable.SetWithOperationActor(context.Background(), tenantID, counterID, *req.Value, idempotencyKey, principalID(ctx))
+				result, err = attributable.SetWithOperationActor(requestDatabaseContext(ctx), tenantID, counterID, *req.Value, idempotencyKey, principalID(ctx))
 			}
 		} else if idempotencyKey == "" {
-			result, err = counterService.Set(context.Background(), tenantID, counterID, *req.Value)
+			result, err = counterService.Set(requestDatabaseContext(ctx), tenantID, counterID, *req.Value)
 		} else {
-			result, err = counterService.SetWithOperation(context.Background(), tenantID, counterID, *req.Value, idempotencyKey)
+			result, err = counterService.SetWithOperation(requestDatabaseContext(ctx), tenantID, counterID, *req.Value, idempotencyKey)
 		}
 		if errors.Is(err, service.ErrCounterNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
@@ -273,7 +272,7 @@ func SetCounterServiceHandlerVersioned(counterService service.CounterService, ve
 			return
 		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Counter service is temporarily unavailable")
+			respondWithServiceError(ctx, err, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Counter service is temporarily unavailable")
 			return
 		}
 
@@ -320,13 +319,13 @@ func GetCounterServiceHandler(counterService service.CounterService) fasthttp.Re
 			return
 		}
 
-		counter, err := counterService.Get(context.Background(), tenantID, counterID)
+		counter, err := counterService.Get(requestDatabaseContext(ctx), tenantID, counterID)
 		if errors.Is(err, service.ErrCounterNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
 			return
 		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
+			respondWithServiceError(ctx, err, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
 			return
 		}
 
@@ -408,13 +407,13 @@ func ListCountersServiceHandler(counterService service.CounterService) fasthttp.
 		if hasCursor {
 			cursor = &service.CounterCursor{CreatedAt: cursorTime, ID: cursorID}
 		}
-		page, err := counterService.List(context.Background(), tenantID, cursor, limit)
+		page, err := counterService.List(requestDatabaseContext(ctx), tenantID, cursor, limit)
 		if errors.Is(err, service.ErrTenantNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "TENANT_NOT_FOUND", "Tenant not found")
 			return
 		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
+			respondWithServiceError(ctx, err, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Database error")
 			return
 		}
 

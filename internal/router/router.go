@@ -71,6 +71,12 @@ func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *
 // NewRouterWithOptions allows deployments to disable the legacy global key
 // after migrating protected clients to managed credentials.
 func NewRouterWithOptions(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, legacyAPIKeyEnabled bool, logger *middleware.Logger, sentryConfig *middleware.SentryConfig) *Router {
+	return NewRouterWithTimeouts(db, corsConfig, rateLimiter, apiKey, legacyAPIKeyEnabled, logger, sentryConfig, middleware.DefaultRouteTimeouts(), 128)
+}
+
+// NewRouterWithTimeouts adds explicit request and process concurrency budgets
+// while preserving the older constructor for existing integrations/tests.
+func NewRouterWithTimeouts(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, legacyAPIKeyEnabled bool, logger *middleware.Logger, sentryConfig *middleware.SentryConfig, timeouts middleware.RouteTimeouts, maxConcurrency int) *Router {
 	r := routing.New()
 	tenantService := service.NewTenantService(store.NewTenantStore(db))
 	counterStore := store.NewCounterStore(db)
@@ -87,6 +93,8 @@ func NewRouterWithOptions(db *database.DB, corsConfig *middleware.CORSConfig, ra
 	}
 	handler = middleware.AuthenticateRequest(middleware.NewAPIKeyAuthenticator(apiKey, credentialStore))(handler)
 	handler = middleware.CORS(corsConfig)(handler)
+	handler = middleware.ConcurrencyLimit(maxConcurrency)(handler)
+	handler = middleware.RequestContext(timeouts)(handler)
 	handler = middleware.ClientIdentity(handler)
 	handler = middleware.LoggingWithLogger(logger)(handler)
 	if sentryConfig != nil && sentryConfig.DSN != "" {
