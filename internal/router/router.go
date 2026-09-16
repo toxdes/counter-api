@@ -1,7 +1,6 @@
 package router
 
 import (
-	"counter/internal/cache"
 	"counter/internal/contract"
 	"counter/internal/database"
 	"counter/internal/handlers"
@@ -78,16 +77,6 @@ func toHandler(handler fasthttp.RequestHandler) routing.Handler {
 
 // NewRouter creates a router with direct PostgreSQL-backed handlers.
 func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger, sentryConfig *middleware.SentryConfig) *Router {
-	return newRouter(db, nil, corsConfig, rateLimiter, apiKey, logger, sentryConfig)
-}
-
-// NewCachedRouter creates a router that overrides cache-eligible read handlers
-// while sharing all middleware and route registration with NewRouter.
-func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger, sentryConfig *middleware.SentryConfig) *Router {
-	return newRouter(db, cachedCounter, corsConfig, rateLimiter, apiKey, logger, sentryConfig)
-}
-
-func newRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger, sentryConfig *middleware.SentryConfig) *Router {
 	r := routing.New()
 	installMiddleware(r, corsConfig, rateLimiter, logger, sentryConfig)
 
@@ -95,7 +84,7 @@ func newRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsConfig *
 	counterStore := store.NewCounterStore(db)
 	counterService := service.NewCounterService(counterStore)
 	historyService := service.NewOperationHistoryService(counterStore)
-	registerRoutes(r, apiKey, tenantService, counterService, historyService, cachedCounter)
+	registerRoutes(r, apiKey, tenantService, counterService, historyService)
 
 	return &Router{RequestHandler: r.HandleRequest}
 }
@@ -143,7 +132,7 @@ func installMiddleware(r *routing.Router, corsConfig *middleware.CORSConfig, rat
 	})
 }
 
-func registerRoutes(r *routing.Router, apiKey string, tenantService service.TenantService, counterService service.CounterService, historyService service.OperationHistoryService, cachedCounter *cache.CachedCounter) {
+func registerRoutes(r *routing.Router, apiKey string, tenantService service.TenantService, counterService service.CounterService, historyService service.OperationHistoryService) {
 	r.Get("/", toHandler(handlers.DocsHandler))
 
 	r.Post("/tenants", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateTenantServiceHandler(tenantService))))
@@ -154,9 +143,6 @@ func registerRoutes(r *routing.Router, apiKey string, tenantService service.Tena
 	getCounter := handlers.GetCounterServiceHandler(counterService)
 	incrementCounter := handlers.IncrementCounterServiceHandler(counterService)
 	setCounter := handlers.SetCounterServiceHandler(counterService)
-	if cachedCounter != nil {
-		getCounter = handlers.CachedGetCounterHandler(cachedCounter)
-	}
 	r.Get("/tenants/<tenant_id>/counters/<counter_id>", toHandler(getCounter))
 	r.Post("/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(incrementCounter))
 	r.Post("/tenants/<tenant_id>/counters/<counter_id>/set", middleware.APIKeyAuthRouting(apiKey)(toHandler(setCounter)))

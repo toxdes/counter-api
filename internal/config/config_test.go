@@ -83,122 +83,19 @@ func TestValidateRequired(t *testing.T) {
 	}
 }
 
-func TestCacheDefaults(t *testing.T) {
-	os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
-	os.Setenv("API_KEY", "test-key")
-	defer func() {
-		os.Unsetenv("DATABASE_URL")
-		os.Unsetenv("API_KEY")
-		os.Unsetenv("CACHE_ENABLED")
-		os.Unsetenv("CACHE_SIZE")
-		os.Unsetenv("CACHE_TTL_SECONDS")
-		os.Unsetenv("CACHE_WORKERS")
-		os.Unsetenv("CACHE_QUEUE_SIZE")
-		os.Unsetenv("CACHE_SHUTDOWN_WAIT")
-	}()
+func TestLegacyCacheSettingsAreIgnoredForCompatibility(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("CACHE_ENABLED", "true")
+	t.Setenv("CACHE_SIZE", "0")
+	t.Setenv("CACHE_TTL_SECONDS", "-1")
+	t.Setenv("CACHE_WORKERS", "0")
+	t.Setenv("CACHE_QUEUE_SIZE", "0")
+	t.Setenv("CACHE_SHUTDOWN_WAIT", "0")
 
-	cfg, err := Load()
+	_, err := Load()
 	if err != nil {
-		t.Fatalf("Load() failed: %v", err)
-	}
-
-	if cfg.CacheEnabled {
-		t.Error("Expected CacheEnabled default false, got true")
-	}
-	if cfg.CacheSize != 1000 {
-		t.Errorf("Expected CacheSize default 1000, got %d", cfg.CacheSize)
-	}
-	if cfg.CacheTTLSeconds != 300 {
-		t.Errorf("Expected CacheTTLSeconds default 300, got %d", cfg.CacheTTLSeconds)
-	}
-	if cfg.CacheWorkers != 2 {
-		t.Errorf("Expected CacheWorkers default 2, got %d", cfg.CacheWorkers)
-	}
-	if cfg.CacheQueueSize != 10000 {
-		t.Errorf("Expected CacheQueueSize default 10000, got %d", cfg.CacheQueueSize)
-	}
-	if cfg.CacheShutdownWait != 5 {
-		t.Errorf("Expected CacheShutdownWait default 5, got %d", cfg.CacheShutdownWait)
-	}
-}
-
-func TestCacheFromEnv(t *testing.T) {
-	os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
-	os.Setenv("API_KEY", "test-key")
-	os.Setenv("CACHE_ENABLED", "false")
-	os.Setenv("CACHE_SIZE", "500")
-	os.Setenv("CACHE_TTL_SECONDS", "600")
-	os.Setenv("CACHE_WORKERS", "4")
-	os.Setenv("CACHE_QUEUE_SIZE", "20000")
-	os.Setenv("CACHE_SHUTDOWN_WAIT", "10")
-	defer func() {
-		os.Unsetenv("DATABASE_URL")
-		os.Unsetenv("API_KEY")
-		os.Unsetenv("CACHE_ENABLED")
-		os.Unsetenv("CACHE_SIZE")
-		os.Unsetenv("CACHE_TTL_SECONDS")
-		os.Unsetenv("CACHE_WORKERS")
-		os.Unsetenv("CACHE_QUEUE_SIZE")
-		os.Unsetenv("CACHE_SHUTDOWN_WAIT")
-	}()
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() failed: %v", err)
-	}
-
-	if cfg.CacheEnabled {
-		t.Error("Expected CacheEnabled false, got true")
-	}
-	if cfg.CacheSize != 500 {
-		t.Errorf("Expected CacheSize 500, got %d", cfg.CacheSize)
-	}
-	if cfg.CacheTTLSeconds != 600 {
-		t.Errorf("Expected CacheTTLSeconds 600, got %d", cfg.CacheTTLSeconds)
-	}
-	if cfg.CacheWorkers != 4 {
-		t.Errorf("Expected CacheWorkers 4, got %d", cfg.CacheWorkers)
-	}
-	if cfg.CacheQueueSize != 20000 {
-		t.Errorf("Expected CacheQueueSize 20000, got %d", cfg.CacheQueueSize)
-	}
-	if cfg.CacheShutdownWait != 10 {
-		t.Errorf("Expected CacheShutdownWait 10, got %d", cfg.CacheShutdownWait)
-	}
-}
-
-func TestCacheValidation(t *testing.T) {
-	tests := []struct {
-		name    string
-		envVar  string
-		value   string
-		wantErr bool
-	}{
-		{"invalid cache size", "CACHE_SIZE", "0", true},
-		{"negative TTL", "CACHE_TTL_SECONDS", "-1", true},
-		{"zero workers", "CACHE_WORKERS", "0", true},
-		{"zero queue size", "CACHE_QUEUE_SIZE", "0", true},
-		{"valid config", "CACHE_SIZE", "100", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
-			os.Setenv("API_KEY", "test-key")
-			os.Setenv("CACHE_ENABLED", "true")
-			os.Setenv(tt.envVar, tt.value)
-			defer func() {
-				os.Unsetenv("DATABASE_URL")
-				os.Unsetenv("API_KEY")
-				os.Unsetenv("CACHE_ENABLED")
-				os.Unsetenv(tt.envVar)
-			}()
-
-			_, err := Load()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Load() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+		t.Fatalf("legacy cache settings must not affect Load(): %v", err)
 	}
 }
 
@@ -286,12 +183,10 @@ func TestSentryValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
 			os.Setenv("API_KEY", "test-key")
-			os.Setenv("CACHE_ENABLED", "true")
 			os.Setenv(tt.envVar, tt.value)
 			defer func() {
 				os.Unsetenv("DATABASE_URL")
 				os.Unsetenv("API_KEY")
-				os.Unsetenv("CACHE_ENABLED")
 				os.Unsetenv(tt.envVar)
 			}()
 

@@ -5,15 +5,14 @@ A lightweight, high-performance HTTP API for managing multi-tenant counters desi
 ## Features
 
 - **Multi-tenant counter management** - Isolated counters per tenant
-- **High-performance caching** - In-memory LRU cache for ultra-fast reads and async writes
-- **High-performance** - Built with fasthttp for 5x faster throughput
+- **High-performance** - Built with fasthttp and PostgreSQL connection pooling
 - **PostgreSQL persistence** - Reliable data storage with connection pooling
 - **Admin operations** - API key authentication for tenant/counter creation
 - **Public operations** - Rate-limited counter access for direct browser calls
 - **CORS support** - First-class browser integration
 - **Structured logging** - JSON logs for easy aggregation
 - **Sentry integration** - Production-ready error tracking and monitoring
-- **Graceful shutdown** - Ensures data integrity on restart
+- **Graceful shutdown** - Stops serving cleanly on restart
 
 ## Quick Start
 
@@ -99,50 +98,16 @@ make clean    # Clean build artifacts
 
 ## Performance
 
-- **Throughput**: 100,000+ requests/second with caching enabled
-- **Latency**: <1ms p50 for cached reads, ~5-10ms for database operations
-- **Memory**: <50MB baseline + cache (configurable, ~1MB per 1000 cached counters)
-- **Connections**: Configurable pool, defaults to 25 max
+The API reads and writes counters through PostgreSQL, which remains the sole
+authoritative data path. Throughput and latency depend on the PostgreSQL
+instance, connection-pool limits, request mix, and number of API replicas.
+The default pool allows 25 open and 5 idle connections per process.
 
-## Cache Configuration
-
-The API includes an optional in-memory LRU cache for high-performance counter operations:
-
-```bash
-# Enable/disable cache (default: false)
-# Keep disabled until the asynchronous write-behind path is removed.
-CACHE_ENABLED=false
-
-# Maximum number of counters to cache (default: 1000)
-CACHE_SIZE=1000
-
-# Cache entry TTL in seconds (default: 300)
-CACHE_TTL_SECONDS=300
-
-# Number of background workers for async writes (default: 2; legacy cache path)
-CACHE_WORKERS=2
-
-# Write queue size (default: 10000; legacy cache path)
-CACHE_QUEUE_SIZE=10000
-
-# Graceful shutdown wait time in seconds (default: 5)
-CACHE_SHUTDOWN_WAIT=5
-```
-
-### Cache Behavior
-
-- **GET requests** check cache first, falling back to database on miss
-- **POST /inc** updates cache immediately and writes to database asynchronously
-- **Cache eviction** uses LRU (Least Recently Used) algorithm
-- **Graceful shutdown** drains pending writes before exiting
-
-### Trade-offs
-
-- ✅ **Performance**: 10-100x faster for cached operations
-- ✅ **Database load**: Reduces database read operations significantly
-- ⚠️ **Data loss**: Server crashes before async writes complete may lose recent increments
-- ⚠️ **Memory usage**: Each cached counter consumes memory (~200 bytes)
-- ⚠️ **Single instance**: Cache is per-instance, not distributed
+The former process-local cache and asynchronous write-behind queue have been
+removed because they could acknowledge writes before persistence and diverge
+between replicas. Existing `CACHE_*` environment variables are accepted but
+ignored with a deprecation warning for one compatibility release; remove them
+from deployment configuration.
 
 ## License
 

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 )
@@ -36,14 +37,6 @@ type Config struct {
 	// Logging
 	LogLevel string
 
-	// Cache
-	CacheEnabled      bool
-	CacheSize         int
-	CacheTTLSeconds   int
-	CacheWorkers      int
-	CacheQueueSize    int
-	CacheShutdownWait int
-
 	// Sentry
 	SentryDSN         string
 	SentryEnvironment string
@@ -53,6 +46,8 @@ type Config struct {
 
 // Load loads configuration from environment variables with sensible defaults
 func Load() (*Config, error) {
+	warnLegacyCacheSettings()
+
 	cfg := &Config{
 		// Bind locally by default. Deployments that intentionally expose the
 		// process directly (for example, a local development container) can
@@ -78,16 +73,6 @@ func Load() (*Config, error) {
 		CORSMaxAge:           getEnvInt("CORS_MAX_AGE", 3600),
 
 		LogLevel: getEnv("LOG_LEVEL", "info"),
-
-		// Write-behind caching is not safe: it can acknowledge operations
-		// before PostgreSQL commits them. Read caching remains opt-in until a
-		// durable, non-authoritative cache path is implemented.
-		CacheEnabled:      getEnvBool("CACHE_ENABLED", false),
-		CacheSize:         getEnvInt("CACHE_SIZE", 1000),
-		CacheTTLSeconds:   getEnvInt("CACHE_TTL_SECONDS", 300),
-		CacheWorkers:      getEnvInt("CACHE_WORKERS", 2),
-		CacheQueueSize:    getEnvInt("CACHE_QUEUE_SIZE", 10000),
-		CacheShutdownWait: getEnvInt("CACHE_SHUTDOWN_WAIT", 5),
 
 		SentryDSN:         getEnv("SENTRY_DSN", ""),
 		SentryEnvironment: getEnv("SENTRY_ENVIRONMENT", "development"),
@@ -118,28 +103,28 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("SERVER_PORT must be between 1 and 65535")
 	}
 
-	// Validate cache configuration
-	if cfg.CacheEnabled {
-		if cfg.CacheSize < 1 {
-			return nil, fmt.Errorf("CACHE_SIZE must be at least 1")
-		}
-		if cfg.CacheTTLSeconds < 0 {
-			return nil, fmt.Errorf("CACHE_TTL_SECONDS cannot be negative")
-		}
-		if cfg.CacheWorkers < 1 {
-			return nil, fmt.Errorf("CACHE_WORKERS must be at least 1")
-		}
-		if cfg.CacheQueueSize < 1 {
-			return nil, fmt.Errorf("CACHE_QUEUE_SIZE must be at least 1")
-		}
-	}
-
 	// Validate Sentry configuration
 	if cfg.SentrySampleRate < 0 || cfg.SentrySampleRate > 1 {
 		return nil, fmt.Errorf("SENTRY_SAMPLE_RATE must be between 0.0 and 1.0")
 	}
 
 	return cfg, nil
+}
+
+func warnLegacyCacheSettings() {
+	for _, key := range []string{
+		"CACHE_ENABLED",
+		"CACHE_SIZE",
+		"CACHE_TTL_SECONDS",
+		"CACHE_WORKERS",
+		"CACHE_QUEUE_SIZE",
+		"CACHE_SHUTDOWN_WAIT",
+	} {
+		if _, ok := os.LookupEnv(key); ok {
+			log.Printf("WARNING: %s is deprecated and ignored; PostgreSQL is the sole counter data path", key)
+			return
+		}
+	}
 }
 
 func getEnv(key, defaultValue string) string {

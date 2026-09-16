@@ -52,6 +52,12 @@ CORS_MAX_AGE=3600
 LOG_LEVEL=warn
 ```
 
+The API uses PostgreSQL as the sole authoritative counter path. The former
+process-local cache and asynchronous write-behind queue are removed. Existing
+`CACHE_*` environment variables are accepted but ignored with a deprecation
+warning for one compatibility release; remove them from systemd, container,
+and VPS configuration.
+
 ### 3. Run Migrations
 
 ```bash
