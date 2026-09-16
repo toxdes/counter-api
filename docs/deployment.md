@@ -58,6 +58,10 @@ LOG_LEVEL=warn
 make migrate-up
 ```
 
+To roll back one migration, run `make migrate-down`. Each invocation rolls
+back only the highest applied migration; repeat it deliberately for additional
+rollbacks.
+
 ## Building
 
 ### Build for Linux
@@ -151,11 +155,13 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 COPY --from=builder /app/counter .
-COPY --from=builder /app/migrations ./migrations
 COPY .env.example .env
 EXPOSE 8080
 CMD ["./counter"]
 ```
+
+The binary embeds the canonical migration history, so no migration directory
+needs to be copied into the runtime image.
 
 Build and run:
 
