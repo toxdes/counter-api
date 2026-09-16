@@ -59,7 +59,15 @@ func (l *Logger) Log(entry *LogEntry) error {
 
 // Logging returns a logging middleware
 func Logging(writer io.Writer) func(fasthttp.RequestHandler) fasthttp.RequestHandler {
-	logger := NewLogger(writer, "info")
+	return LoggingWithLogger(NewLogger(writer, "info"))
+}
+
+// LoggingWithLogger wraps the actual downstream handler with the supplied
+// structured logger so status and duration describe route execution.
+func LoggingWithLogger(logger *Logger) func(fasthttp.RequestHandler) fasthttp.RequestHandler {
+	if logger == nil {
+		logger = NewLogger(nil, "info")
+	}
 
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
@@ -81,7 +89,7 @@ func Logging(writer io.Writer) func(fasthttp.RequestHandler) fasthttp.RequestHan
 				Time:      start.UTC().Format(time.RFC3339),
 				RequestID: requestID,
 				Method:    string(ctx.Method()),
-				Path:      string(ctx.Path()),
+				Path:      RouteTemplate(string(ctx.Path())),
 				Status:    ctx.Response.StatusCode(),
 				Duration:  duration,
 			}

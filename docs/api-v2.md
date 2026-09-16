@@ -8,7 +8,7 @@ remain V1 and continue to support current clients.
 
 ## Contract Guarantees
 
-- Every mutation requires an `Idempotency-Key` header containing a UUID.
+- Every V2 counter mutation requires an `Idempotency-Key` header containing a UUID.
 - The key is scoped to the tenant and identifies one logical mutation.
 - A retry with the same key and the same canonical request returns the original
   result without applying the mutation again.
@@ -21,8 +21,14 @@ remain V1 and continue to support current clients.
 ## Authentication
 
 V2 preserves the existing authentication requirements unless an endpoint's V2
-contract explicitly documents a change. Existing admin endpoints require the
-`X-API-Key` header.
+contract explicitly documents a change. The legacy environment administrator
+key remains accepted during migration. Tenant-scoped keys use the format
+`ck_{credential_id}.{secret}` and are returned only once when created.
+
+Tenant-scoped credentials are authorized by both their tenant and their action
+scopes. Supported scopes are `tenant:read`, `counter:read`,
+`counter:create`, `counter:increment`, `counter:adjust`, and
+`counter:history`.
 
 ## Increment Counter
 
@@ -32,6 +38,7 @@ Increments a counter by a positive delta.
 
 ```http
 POST /v2/tenants/{tenant_id}/counters/{counter_id}/inc?delta=5
+X-API-Key: tenant-scoped-key
 Idempotency-Key: 01912345-6789-7000-8000-000000000003
 Content-Type: application/json
 ```
@@ -56,6 +63,9 @@ Content-Type: application/json
 ```
 
 An exact retry returns the same result with `replayed: true`.
+
+V2 increments require a credential with the `counter:increment` scope. V1
+increments remain compatible with the existing public route policy.
 
 ### Errors
 
@@ -141,6 +151,65 @@ The operation-history response excludes request hashes and other internal
 fields. The operator command `--reconcile` verifies that completed operation
 deltas equal each stored counter value and that each counter has exactly one
 `initial_value` operation.
+
+## Tenant Credentials
+
+The administrator may create, rotate, and revoke tenant-scoped credentials.
+The raw key is returned only in the create or rotate response; store it
+securely because it cannot be recovered later.
+
+### Create
+
+```http
+POST /v2/tenants/{tenant_id}/credentials
+X-API-Key: administrator-key
+Content-Type: application/json
+
+{
+  "scopes": ["counter:read", "counter:increment", "counter:history"]
+}
+```
+
+The `scopes` field is optional and defaults to read, increment, and history.
+An optional `expires_at` timestamp can limit credential lifetime.
+
+### Rotate
+
+```http
+POST /v2/tenants/{tenant_id}/credentials/{credential_id}/rotate
+X-API-Key: administrator-key
+```
+
+Rotation creates a new key with the same scopes and leaves the old key valid
+until it is explicitly revoked, allowing overlap during client migration.
+
+### Revoke
+
+```http
+POST /v2/tenants/{tenant_id}/credentials/{credential_id}/revoke
+X-API-Key: administrator-key
+```
+
+Credential lifecycle events are audited without storing raw secrets.
+
+### Create Administrator Credential
+
+During migration, an existing administrator can provision a managed
+administrator credential before disabling the legacy environment key:
+
+```http
+POST /v2/admin/credentials
+X-API-Key: administrator-key
+Content-Type: application/json
+
+{
+  "scopes": []
+}
+```
+
+Administrator credentials are not tenant-scoped and inherit all supported
+action scopes. The legacy key should remain enabled until this credential has
+been distributed to administrators and verified.
 
 ## Reads and Consistency
 

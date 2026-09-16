@@ -52,6 +52,16 @@ type CounterService interface {
 	SetWithOperation(context.Context, string, string, int64, string) (*CounterMutationResult, error)
 }
 
+// AttributableCounterService is implemented by the durable service to attach
+// the authenticated principal to operation-history records.
+type AttributableCounterService interface {
+	CounterService
+	IncrementWithActor(context.Context, string, string, int64, string) (*CounterMutationResult, error)
+	IncrementWithOperationActor(context.Context, string, string, int64, string, string) (*CounterMutationResult, error)
+	SetWithActor(context.Context, string, string, int64, string) (*CounterMutationResult, error)
+	SetWithOperationActor(context.Context, string, string, int64, string, string) (*CounterMutationResult, error)
+}
+
 type counterService struct {
 	repository CounterRepository
 	now        func() time.Time
@@ -136,12 +146,24 @@ func (s *counterService) Increment(ctx context.Context, tenantID, counterID stri
 }
 
 func (s *counterService) IncrementWithOperation(ctx context.Context, tenantID, counterID string, delta int64, operationID string) (*CounterMutationResult, error) {
+	return s.incrementWithActor(ctx, tenantID, counterID, delta, operationID, "")
+}
+
+func (s *counterService) IncrementWithActor(ctx context.Context, tenantID, counterID string, delta int64, actorID string) (*CounterMutationResult, error) {
+	return s.incrementWithActor(ctx, tenantID, counterID, delta, "", actorID)
+}
+
+func (s *counterService) IncrementWithOperationActor(ctx context.Context, tenantID, counterID string, delta int64, operationID, actorID string) (*CounterMutationResult, error) {
+	return s.incrementWithActor(ctx, tenantID, counterID, delta, operationID, actorID)
+}
+
+func (s *counterService) incrementWithActor(ctx context.Context, tenantID, counterID string, delta int64, operationID, actorID string) (*CounterMutationResult, error) {
 	if operationID == "" {
 		operationID = s.newID()
 	}
 
 	now := s.now()
-	result, err := s.repository.IncrementCounter(ctx, tenantID, counterID, delta, operationID, incrementRequestHash(tenantID, counterID, delta), now)
+	result, err := s.incrementRepository(ctx, tenantID, counterID, delta, operationID, incrementRequestHash(tenantID, counterID, delta), actorID, now)
 	if errors.Is(err, store.ErrCounterNotFound) {
 		return nil, ErrCounterNotFound
 	}
@@ -175,12 +197,24 @@ func (s *counterService) Set(ctx context.Context, tenantID, counterID string, va
 }
 
 func (s *counterService) SetWithOperation(ctx context.Context, tenantID, counterID string, value int64, operationID string) (*CounterMutationResult, error) {
+	return s.setWithActor(ctx, tenantID, counterID, value, operationID, "")
+}
+
+func (s *counterService) SetWithActor(ctx context.Context, tenantID, counterID string, value int64, actorID string) (*CounterMutationResult, error) {
+	return s.setWithActor(ctx, tenantID, counterID, value, "", actorID)
+}
+
+func (s *counterService) SetWithOperationActor(ctx context.Context, tenantID, counterID string, value int64, operationID, actorID string) (*CounterMutationResult, error) {
+	return s.setWithActor(ctx, tenantID, counterID, value, operationID, actorID)
+}
+
+func (s *counterService) setWithActor(ctx context.Context, tenantID, counterID string, value int64, operationID, actorID string) (*CounterMutationResult, error) {
 	if operationID == "" {
 		operationID = s.newID()
 	}
 
 	now := s.now()
-	result, err := s.repository.SetCounterValueWithOperation(ctx, tenantID, counterID, value, operationID, setRequestHash(tenantID, counterID, value), now)
+	result, err := s.setRepository(ctx, tenantID, counterID, value, operationID, setRequestHash(tenantID, counterID, value), actorID, now)
 	if errors.Is(err, store.ErrCounterNotFound) {
 		return nil, ErrCounterNotFound
 	}
@@ -204,6 +238,24 @@ func (s *counterService) SetWithOperation(ctx context.Context, tenantID, counter
 		UpdatedAt:   result.UpdatedAt,
 		Replayed:    result.Replayed,
 	}, nil
+}
+
+func (s *counterService) incrementRepository(ctx context.Context, tenantID, counterID string, delta int64, operationID string, requestHash []byte, actorID string, now time.Time) (store.MutationResult, error) {
+	if actorRepository, ok := s.repository.(interface {
+		IncrementCounterWithActor(context.Context, string, string, int64, string, []byte, string, time.Time) (store.MutationResult, error)
+	}); ok {
+		return actorRepository.IncrementCounterWithActor(ctx, tenantID, counterID, delta, operationID, requestHash, actorID, now)
+	}
+	return s.repository.IncrementCounter(ctx, tenantID, counterID, delta, operationID, requestHash, now)
+}
+
+func (s *counterService) setRepository(ctx context.Context, tenantID, counterID string, value int64, operationID string, requestHash []byte, actorID string, now time.Time) (store.MutationResult, error) {
+	if actorRepository, ok := s.repository.(interface {
+		SetCounterValueWithOperationWithActor(context.Context, string, string, int64, string, []byte, string, time.Time) (store.MutationResult, error)
+	}); ok {
+		return actorRepository.SetCounterValueWithOperationWithActor(ctx, tenantID, counterID, value, operationID, requestHash, actorID, now)
+	}
+	return s.repository.SetCounterValueWithOperation(ctx, tenantID, counterID, value, operationID, requestHash, now)
 }
 
 func incrementRequestHash(tenantID, counterID string, delta int64) []byte {

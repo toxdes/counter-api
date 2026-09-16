@@ -130,7 +130,13 @@ func IncrementCounterServiceHandlerVersioned(counterService service.CounterServi
 
 		var result *service.CounterMutationResult
 		var err error
-		if idempotencyKey == "" {
+		if attributable, ok := counterService.(service.AttributableCounterService); ok {
+			if idempotencyKey == "" {
+				result, err = attributable.IncrementWithActor(context.Background(), tenantID, counterID, delta, principalID(ctx))
+			} else {
+				result, err = attributable.IncrementWithOperationActor(context.Background(), tenantID, counterID, delta, idempotencyKey, principalID(ctx))
+			}
+		} else if idempotencyKey == "" {
 			result, err = counterService.Increment(context.Background(), tenantID, counterID, delta)
 		} else {
 			result, err = counterService.IncrementWithOperation(context.Background(), tenantID, counterID, delta, idempotencyKey)
@@ -239,7 +245,13 @@ func SetCounterServiceHandlerVersioned(counterService service.CounterService, ve
 
 		var result *service.CounterMutationResult
 		var err error
-		if idempotencyKey == "" {
+		if attributable, ok := counterService.(service.AttributableCounterService); ok {
+			if idempotencyKey == "" {
+				result, err = attributable.SetWithActor(context.Background(), tenantID, counterID, *req.Value, principalID(ctx))
+			} else {
+				result, err = attributable.SetWithOperationActor(context.Background(), tenantID, counterID, *req.Value, idempotencyKey, principalID(ctx))
+			}
+		} else if idempotencyKey == "" {
 			result, err = counterService.Set(context.Background(), tenantID, counterID, *req.Value)
 		} else {
 			result, err = counterService.SetWithOperation(context.Background(), tenantID, counterID, *req.Value, idempotencyKey)

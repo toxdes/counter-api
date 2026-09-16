@@ -10,8 +10,8 @@ func TestEmbeddedMigrationHistoryIsCanonicalAndPaired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("discover migrations: %v", err)
 	}
-	if len(files) != 6 {
-		t.Fatalf("expected six canonical migrations, got %d", len(files))
+	if len(files) != 7 {
+		t.Fatalf("expected seven canonical migrations, got %d", len(files))
 	}
 
 	for index, file := range files {
@@ -31,6 +31,9 @@ func TestEmbeddedMigrationHistoryIsCanonicalAndPaired(t *testing.T) {
 	}
 	if !strings.Contains(files[4].up, "opening_balance") || !strings.Contains(files[5].up, "initial_value") {
 		t.Fatal("operation kind history does not migrate to initial_value")
+	}
+	if !strings.Contains(files[6].up, "api_credentials") || !strings.Contains(files[6].up, "auth_audit_events") {
+		t.Fatal("version 7 does not define credential storage and auth audit events")
 	}
 }
 

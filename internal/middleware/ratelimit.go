@@ -3,7 +3,6 @@ package middleware
 import (
 	"net"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -245,11 +244,15 @@ func RateLimit(rl *RateLimiter) func(fasthttp.RequestHandler) fasthttp.RequestHa
 			// Check if this is a GET request (read operation)
 			isGet := string(ctx.Method()) == "GET"
 
-			// Get client IP
-			ip := getClientIP(ctx)
+			// Use authenticated credentials for fairer quotas; public requests
+			// remain bounded by canonical client identity.
+			key := ClientIPFromRequest(ctx)
+			if principal, ok := PrincipalFromRequest(ctx); ok && principal.CredentialID != "" {
+				key = "credential:" + principal.CredentialID
+			}
 
 			// Check if request should be allowed
-			allowed, retryAfter := rl.AllowRequest(ip, isGet)
+			allowed, retryAfter := rl.AllowRequest(key, isGet)
 
 			// Set rate limit headers
 			maxReq := rl.maxRequests
@@ -272,63 +275,10 @@ func RateLimit(rl *RateLimiter) func(fasthttp.RequestHandler) fasthttp.RequestHa
 }
 
 func getClientIP(ctx *fasthttp.RequestCtx) string {
-	// IMPORTANT: Don't trust client-controlled headers for rate limiting
-	// They can easily spoof IPs to bypass rate limiting
-	//
-	// Only trust X-Forwarded-For/X-Real-IP if from trusted proxy (localhost/private network)
-	remoteIP := ctx.RemoteIP()
-
-	// Check if request is from trusted proxy (localhost or private network)
-	if isTrustedProxy(remoteIP) {
-		// Try X-Real-IP first
-		if ip := ctx.Request.Header.Peek("X-Real-IP"); len(ip) > 0 {
-			parsedIP := net.ParseIP(string(ip))
-			if parsedIP != nil {
-				return parsedIP.String()
-			}
-		}
-
-		// Try X-Forwarded-For (take first IP in chain)
-		if ip := ctx.Request.Header.Peek("X-Forwarded-For"); len(ip) > 0 {
-			ips := strings.Split(string(ip), ",")
-			if len(ips) > 0 {
-				parsedIP := net.ParseIP(strings.TrimSpace(ips[0]))
-				if parsedIP != nil {
-					return parsedIP.String()
-				}
-			}
-		}
-	}
-
-	// Fall back to actual remote address
-	return remoteIP.String()
+	return ClientIPFromRequest(ctx)
 }
 
 // isTrustedProxy checks if an IP is from a trusted proxy (localhost/private network)
 func isTrustedProxy(ip net.IP) bool {
-	if ip.IsLoopback() {
-		return true
-	}
-
-	if ip.IsPrivate() {
-		return true
-	}
-
-	// IPv4 private ranges
-	if ip4 := ip.To4(); ip4 != nil {
-		// 10.0.0.0/8
-		if ip4[0] == 10 {
-			return true
-		}
-		// 172.16.0.0/12
-		if ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31 {
-			return true
-		}
-		// 192.168.0.0/16
-		if ip4[0] == 192 && ip4[1] == 168 {
-			return true
-		}
-	}
-
-	return false
+	return IsTrustedProxy(ip)
 }

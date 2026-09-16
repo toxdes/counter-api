@@ -38,6 +38,7 @@ DB_MAX_OPEN_CONNS=25
 DB_MAX_IDLE_CONNS=5
 
 API_KEY=your-random-secure-api-key-here
+LEGACY_API_KEY_ENABLED=true
 
 RATE_LIMIT_REQUESTS=10
 RATE_LIMIT_WINDOW=60
@@ -45,7 +46,7 @@ RATE_LIMIT_CLEANUP=300
 
 CORS_ALLOWED_ORIGINS=https://yourdomain.com
 CORS_ALLOWED_METHODS=GET,POST,OPTIONS
-CORS_ALLOWED_HEADERS=Content-Type,Authorization,X-Request-ID
+CORS_ALLOWED_HEADERS=Content-Type,Authorization,X-Request-ID,X-API-Key,Idempotency-Key
 CORS_ALLOW_CREDENTIALS=false
 CORS_MAX_AGE=3600
 
@@ -57,6 +58,15 @@ process-local cache and asynchronous write-behind queue are removed. Existing
 `CACHE_*` environment variables are accepted but ignored with a deprecation
 warning for one compatibility release; remove them from systemd, container,
 and VPS configuration.
+
+`API_KEY` is the legacy administrator/bootstrap credential. It is required for
+tenant creation and credential lifecycle operations. New tenant credentials
+are stored as one-way verifiers in PostgreSQL and should be created, rotated,
+and revoked through the V2 credential endpoints. Set
+`LEGACY_API_KEY_ENABLED=false` only after all protected clients have migrated
+to managed credentials; keep it enabled during the compatibility period. To
+disable it safely, first provision a managed administrator credential through
+`POST /v2/admin/credentials`.
 
 ### 3. Run Migrations
 

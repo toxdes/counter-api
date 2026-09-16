@@ -173,7 +173,7 @@ func main() {
 	}()
 
 	// Create router
-	r := router.NewRouter(db, corsConfig, rateLimiter, cfg.APIKey, logger, sentryConfig)
+	r := router.NewRouterWithOptions(db, corsConfig, rateLimiter, cfg.APIKey, cfg.LegacyAPIKeyEnabled, logger, sentryConfig)
 
 	// Helper function to find last index of a byte in a string
 

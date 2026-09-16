@@ -19,7 +19,8 @@ type Config struct {
 	DBMaxIdleConns int
 
 	// Security
-	APIKey string
+	APIKey              string
+	LegacyAPIKeyEnabled bool
 
 	// Rate Limiting
 	RateLimitRequests      int
@@ -60,6 +61,9 @@ func Load() (*Config, error) {
 		DBMaxIdleConns: getEnvInt("DB_MAX_IDLE_CONNS", 5),
 
 		APIKey: getEnv("API_KEY", ""),
+		// Keep the environment key enabled by default for V1 compatibility.
+		// Operators can disable it after migrating to managed credentials.
+		LegacyAPIKeyEnabled: getEnvBool("LEGACY_API_KEY_ENABLED", true),
 
 		RateLimitRequests:      getEnvInt("RATE_LIMIT_REQUESTS", 10),
 		RateLimitGetMultiplier: getEnvInt("RATE_LIMIT_GET_MULTIPLIER", 3),
@@ -68,7 +72,7 @@ func Load() (*Config, error) {
 
 		CORSAllowedOrigins:   getEnv("CORS_ALLOWED_ORIGINS", "*"),
 		CORSAllowedMethods:   getEnv("CORS_ALLOWED_METHODS", "GET,POST,OPTIONS"),
-		CORSAllowedHeaders:   getEnv("CORS_ALLOWED_HEADERS", "Content-Type,Authorization,X-Request-ID"),
+		CORSAllowedHeaders:   getEnv("CORS_ALLOWED_HEADERS", "Content-Type,Authorization,X-Request-ID,X-API-Key,Idempotency-Key"),
 		CORSAllowCredentials: getEnvBool("CORS_ALLOW_CREDENTIALS", false),
 		CORSMaxAge:           getEnvInt("CORS_MAX_AGE", 3600),
 

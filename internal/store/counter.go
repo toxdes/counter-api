@@ -141,6 +141,14 @@ type operationRecord struct {
 }
 
 func (s *CounterStore) IncrementCounter(ctx context.Context, tenantID, counterID string, delta int64, operationID string, requestHash []byte, now time.Time) (MutationResult, error) {
+	return s.incrementCounter(ctx, tenantID, counterID, delta, operationID, requestHash, "", now)
+}
+
+func (s *CounterStore) IncrementCounterWithActor(ctx context.Context, tenantID, counterID string, delta int64, operationID string, requestHash []byte, actorID string, now time.Time) (MutationResult, error) {
+	return s.incrementCounter(ctx, tenantID, counterID, delta, operationID, requestHash, actorID, now)
+}
+
+func (s *CounterStore) incrementCounter(ctx context.Context, tenantID, counterID string, delta int64, operationID string, requestHash []byte, actorID string, now time.Time) (MutationResult, error) {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return MutationResult{}, fmt.Errorf("begin increment counter: %w", err)
@@ -155,12 +163,12 @@ func (s *CounterStore) IncrementCounter(ctx context.Context, tenantID, counterID
 	var insertedID string
 	err = tx.QueryRowxContext(ctx, `
 		INSERT INTO counter_operations (
-			tenant_id, counter_id, operation_id, kind, delta, request_hash, state, created_at
+			tenant_id, counter_id, operation_id, kind, delta, request_hash, actor_id, state, created_at
 		)
-		VALUES ($1, $2, $3, 'increment', $4, $5, 'pending', $6)
+		VALUES ($1, $2, $3, 'increment', $4, $5, $6, 'pending', $7)
 		ON CONFLICT (tenant_id, operation_id) DO NOTHING
 		RETURNING operation_id
-	`, tenantID, counterID, operationID, delta, requestHash, now).Scan(&insertedID)
+	`, tenantID, counterID, operationID, delta, requestHash, actorID, now).Scan(&insertedID)
 	if errors.Is(err, sql.ErrNoRows) {
 		result, resolveErr := resolveExistingOperation(ctx, tx, tenantID, operationID, counterID, "increment", &delta, requestHash)
 		if resolveErr != nil {
@@ -229,6 +237,14 @@ func (s *CounterStore) IncrementCounter(ctx context.Context, tenantID, counterID
 }
 
 func (s *CounterStore) SetCounterValueWithOperation(ctx context.Context, tenantID, counterID string, value int64, operationID string, requestHash []byte, now time.Time) (MutationResult, error) {
+	return s.setCounterValueWithOperation(ctx, tenantID, counterID, value, operationID, requestHash, "", now)
+}
+
+func (s *CounterStore) SetCounterValueWithOperationWithActor(ctx context.Context, tenantID, counterID string, value int64, operationID string, requestHash []byte, actorID string, now time.Time) (MutationResult, error) {
+	return s.setCounterValueWithOperation(ctx, tenantID, counterID, value, operationID, requestHash, actorID, now)
+}
+
+func (s *CounterStore) setCounterValueWithOperation(ctx context.Context, tenantID, counterID string, value int64, operationID string, requestHash []byte, actorID string, now time.Time) (MutationResult, error) {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return MutationResult{}, fmt.Errorf("begin set counter: %w", err)
@@ -260,12 +276,12 @@ func (s *CounterStore) SetCounterValueWithOperation(ctx context.Context, tenantI
 	var insertedID string
 	err = tx.QueryRowxContext(ctx, `
 		INSERT INTO counter_operations (
-			tenant_id, counter_id, operation_id, kind, delta, request_hash, state, created_at
+			tenant_id, counter_id, operation_id, kind, delta, request_hash, actor_id, state, created_at
 		)
-		VALUES ($1, $2, $3, 'set_adjustment', $4, $5, 'pending', $6)
+		VALUES ($1, $2, $3, 'set_adjustment', $4, $5, $6, 'pending', $7)
 		ON CONFLICT (tenant_id, operation_id) DO NOTHING
 		RETURNING operation_id
-	`, tenantID, counterID, operationID, delta, requestHash, now).Scan(&insertedID)
+	`, tenantID, counterID, operationID, delta, requestHash, actorID, now).Scan(&insertedID)
 	if errors.Is(err, sql.ErrNoRows) {
 		result, resolveErr := resolveExistingOperation(ctx, tx, tenantID, operationID, counterID, "set_adjustment", nil, requestHash)
 		if resolveErr != nil {
@@ -296,6 +312,15 @@ func (s *CounterStore) SetCounterValueWithOperation(ctx context.Context, tenantI
 		WHERE tenant_id = $4 AND operation_id = $5
 	`, current, value, now, tenantID, operationID); err != nil {
 		return MutationResult{}, fmt.Errorf("complete set operation: %w", err)
+	}
+	if actorID != "" {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO auth_audit_events (
+				id, tenant_id, actor_id, action, metadata, created_at
+			) VALUES ($1, $2, $3, 'privileged_adjustment', $4, $5)
+		`, operationID, tenantID, actorID, fmt.Sprintf(`{"operation_id":%q}`, operationID), now); err != nil {
+			return MutationResult{}, fmt.Errorf("audit set operation: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return MutationResult{}, fmt.Errorf("commit set counter: %w", err)

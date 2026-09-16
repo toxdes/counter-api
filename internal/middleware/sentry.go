@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"fmt"
-	"net"
 	"strings"
 
 	"github.com/getsentry/sentry-go"
@@ -104,7 +103,7 @@ func NewSentryHandler(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 				scope.SetTag("counter_id", counterID)
 				scope.SetTag("client_ip", clientIP)
 				scope.SetTag("method", string(ctx.Method()))
-				scope.SetTag("path", string(ctx.Path()))
+				scope.SetTag("path", RouteTemplate(string(ctx.Path())))
 
 				// Set user context if tenant_id is available
 				if tenantID != "" {
@@ -167,25 +166,7 @@ func NewSentryHandler(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 // sentryClientIP returns the visitor identity established by the trusted
 // loopback nginx proxy. Forwarding headers from any other peer are ignored.
 func sentryClientIP(ctx *fasthttp.RequestCtx) string {
-	remoteIP := ctx.RemoteIP()
-	if remoteIP != nil && remoteIP.IsLoopback() {
-		if ip := net.ParseIP(strings.TrimSpace(string(ctx.Request.Header.Peek("X-Real-IP")))); ip != nil {
-			return ip.String()
-		}
-
-		if forwarded := ctx.Request.Header.Peek("X-Forwarded-For"); len(forwarded) > 0 {
-			for _, candidate := range strings.Split(string(forwarded), ",") {
-				if ip := net.ParseIP(strings.TrimSpace(candidate)); ip != nil {
-					return ip.String()
-				}
-			}
-		}
-	}
-
-	if remoteIP == nil {
-		return ""
-	}
-	return remoteIP.String()
+	return CanonicalClientIP(ctx)
 }
 
 // extractHeaders extracts HTTP headers from fasthttp context

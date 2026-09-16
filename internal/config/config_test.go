@@ -68,6 +68,20 @@ func TestLoadFromEnv(t *testing.T) {
 	}
 }
 
+func TestLegacyAPIKeyCanBeDisabled(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("LEGACY_API_KEY_ENABLED", "false")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if cfg.LegacyAPIKeyEnabled {
+		t.Fatal("LEGACY_API_KEY_ENABLED=false should disable the compatibility key")
+	}
+}
+
 func TestValidateRequired(t *testing.T) {
 	requiredVars := []string{
 		"DATABASE_URL", "API_KEY",
