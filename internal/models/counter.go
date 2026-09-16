@@ -80,16 +80,22 @@ func (r *CreateCounterRequest) Validate() error {
 
 // IncrementResponse represents a response to an increment operation
 type IncrementResponse struct {
-	CounterID string    `json:"counter_id"`
-	Value     int64     `json:"value"`
-	UpdatedAt time.Time `json:"updated_at"`
+	OperationID string    `json:"operation_id,omitempty"`
+	CounterID   string    `json:"counter_id"`
+	Delta       int64     `json:"delta,omitempty"`
+	Value       int64     `json:"value"`
+	Replayed    bool      `json:"replayed"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // SetValueResponse represents a response to a set value operation
 type SetValueResponse struct {
-	CounterID string    `json:"counter_id"`
-	Value     int64     `json:"value"`
-	UpdatedAt time.Time `json:"updated_at"`
+	OperationID string    `json:"operation_id,omitempty"`
+	CounterID   string    `json:"counter_id"`
+	Delta       int64     `json:"delta,omitempty"`
+	Value       int64     `json:"value"`
+	Replayed    bool      `json:"replayed"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // SetCounterValueRequest represents a request to set a counter value

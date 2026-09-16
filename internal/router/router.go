@@ -2,6 +2,7 @@ package router
 
 import (
 	"counter/internal/cache"
+	"counter/internal/contract"
 	"counter/internal/database"
 	"counter/internal/handlers"
 	"counter/internal/middleware"
@@ -29,6 +30,8 @@ var routeSurface = []string{
 	"GET /tenants/<tenant_id>/counters/<counter_id>",
 	"POST /tenants/<tenant_id>/counters/<counter_id>/inc",
 	"POST /tenants/<tenant_id>/counters/<counter_id>/set",
+	"POST /v2/tenants/<tenant_id>/counters/<counter_id>/inc",
+	"POST /v2/tenants/<tenant_id>/counters/<counter_id>/set",
 	"OPTIONS /*",
 }
 
@@ -77,8 +80,8 @@ func NewRouter(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *
 	return newRouter(db, nil, corsConfig, rateLimiter, apiKey, logger, sentryConfig)
 }
 
-// NewCachedRouter creates a router that overrides cache-eligible counter
-// handlers while sharing all middleware and route registration with NewRouter.
+// NewCachedRouter creates a router that overrides cache-eligible read handlers
+// while sharing all middleware and route registration with NewRouter.
 func NewCachedRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, logger *middleware.Logger, sentryConfig *middleware.SentryConfig) *Router {
 	return newRouter(db, cachedCounter, corsConfig, rateLimiter, apiKey, logger, sentryConfig)
 }
@@ -150,12 +153,15 @@ func registerRoutes(r *routing.Router, apiKey string, tenantService service.Tena
 	setCounter := handlers.SetCounterServiceHandler(counterService)
 	if cachedCounter != nil {
 		getCounter = handlers.CachedGetCounterHandler(cachedCounter)
-		incrementCounter = handlers.CachedIncrementCounterHandler(cachedCounter)
-		setCounter = handlers.CachedSetCounterValueHandler(cachedCounter)
 	}
 	r.Get("/tenants/<tenant_id>/counters/<counter_id>", toHandler(getCounter))
 	r.Post("/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(incrementCounter))
 	r.Post("/tenants/<tenant_id>/counters/<counter_id>/set", middleware.APIKeyAuthRouting(apiKey)(toHandler(setCounter)))
+
+	v2IncrementCounter := handlers.IncrementCounterServiceHandlerVersioned(counterService, contract.V2)
+	v2SetCounter := handlers.SetCounterServiceHandlerVersioned(counterService, contract.V2)
+	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(v2IncrementCounter))
+	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/set", middleware.APIKeyAuthRouting(apiKey)(toHandler(v2SetCounter)))
 
 	r.Options("/*", func(c *routing.Context) error {
 		c.RequestCtx.SetStatusCode(fasthttp.StatusOK)

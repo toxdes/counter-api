@@ -12,10 +12,14 @@ import (
 )
 
 var (
-	ErrTenantNotFound  = errors.New("tenant not found")
-	ErrTenantConflict  = errors.New("tenant label already exists")
-	ErrCounterNotFound = errors.New("counter not found")
-	ErrCounterConflict = errors.New("counter label already exists")
+	ErrTenantNotFound       = errors.New("tenant not found")
+	ErrTenantConflict       = errors.New("tenant label already exists")
+	ErrCounterNotFound      = errors.New("counter not found")
+	ErrCounterConflict      = errors.New("counter label already exists")
+	ErrDeltaExceedsMaximum  = errors.New("delta exceeds maximum")
+	ErrCounterOverflow      = errors.New("counter overflow")
+	ErrIdempotencyKeyReused = errors.New("idempotency key reused")
+	ErrOperationInProgress  = errors.New("operation is already in progress")
 )
 
 // TenantStore contains PostgreSQL persistence for tenant operations.

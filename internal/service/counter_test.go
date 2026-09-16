@@ -44,32 +44,32 @@ func (f *fakeCounterRepository) ListCounters(context.Context, string, *models.Co
 	return nil, nil
 }
 
-func (f *fakeCounterRepository) IncrementCounter(_ context.Context, tenantID, counterID string, delta int64, now time.Time) (int64, error) {
+func (f *fakeCounterRepository) IncrementCounter(_ context.Context, tenantID, counterID string, delta int64, operationID string, requestHash []byte, now time.Time) (store.MutationResult, error) {
 	f.incrementTenant = tenantID
 	f.incrementID = counterID
 	f.incrementDelta = delta
 	f.incrementAt = now
-	return f.incrementValue, f.incrementErr
+	return store.MutationResult{OperationID: operationID, Delta: delta, Value: f.incrementValue, UpdatedAt: now}, f.incrementErr
 }
 
-func (f *fakeCounterRepository) SetCounterValue(_ context.Context, tenantID, counterID string, value int64, now time.Time) error {
+func (f *fakeCounterRepository) SetCounterValueWithOperation(_ context.Context, tenantID, counterID string, value int64, operationID string, requestHash []byte, now time.Time) (store.MutationResult, error) {
 	f.setTenant = tenantID
 	f.setID = counterID
 	f.setValue = value
 	f.setAt = now
-	return f.setErr
+	return store.MutationResult{OperationID: operationID, Value: value, UpdatedAt: now}, f.setErr
 }
 
 func TestCounterServiceIncrementEnforcesMaxDelta(t *testing.T) {
-	repository := &fakeCounterRepository{counter: &models.Counter{MaxDelta: 5}}
+	repository := &fakeCounterRepository{incrementErr: store.ErrDeltaExceedsMaximum}
 	service := NewCounterService(repository)
 
 	_, err := service.Increment(context.Background(), "tenant-id", "counter-id", 6)
 	if !errors.Is(err, ErrDeltaExceedsMaximum) {
 		t.Fatalf("increment error = %v, want %v", err, ErrDeltaExceedsMaximum)
 	}
-	if repository.incrementDelta != 0 {
-		t.Fatal("repository was called after max-delta rejection")
+	if repository.incrementDelta != 6 {
+		t.Fatalf("repository delta = %d, want 6", repository.incrementDelta)
 	}
 }
 

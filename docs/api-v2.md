@@ -65,8 +65,10 @@ An exact retry returns the same result with `replayed: true`.
 | `400` | `INVALID_IDEMPOTENCY_KEY` | The key is not a valid UUID |
 | `400` | `INVALID_DELTA` | Delta is missing, non-positive, or malformed |
 | `400` | `DELTA_EXCEEDS_MAXIMUM` | Delta exceeds the counter's configured maximum |
+| `400` | `COUNTER_OVERFLOW` | The resulting counter value is outside the supported range |
 | `404` | `COUNTER_NOT_FOUND` | Counter does not exist for the tenant |
 | `409` | `IDEMPOTENCY_KEY_REUSED` | Key was used for different request data |
+| `409` | `OPERATION_IN_PROGRESS` | The operation is already being completed |
 | `503` | `SERVICE_UNAVAILABLE` | Mutation could not reach a usable database |
 
 ## Set Counter Value
@@ -86,8 +88,23 @@ Content-Type: application/json
 }
 ```
 
+### Response
+
+```json
+{
+  "operation_id": "01912345-6789-7000-8000-000000000004",
+  "counter_id": "01912345-6789-7000-8000-000000000002",
+  "delta": 53,
+  "value": 100,
+  "replayed": false,
+  "updated_at": "2026-04-07T12:03:00Z"
+}
+```
+
+An exact retry returns the same result with `replayed: true`.
+
 ## Reads and Consistency
 
 V2 reads are strong while served by the PostgreSQL primary. Future stale-capable
 or striped reads must expose their freshness/version metadata explicitly; they
-must not be presented as exact immediate balances.
+must not be presented as exact immediate counter values.

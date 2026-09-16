@@ -4,6 +4,8 @@ import (
 	"context"
 	"counter/internal/models"
 	"counter/internal/store"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"time"
 
@@ -20,9 +22,12 @@ type CounterPage struct {
 }
 
 type CounterMutationResult struct {
-	CounterID string
-	Value     int64
-	UpdatedAt time.Time
+	OperationID string
+	CounterID   string
+	Delta       int64
+	Value       int64
+	UpdatedAt   time.Time
+	Replayed    bool
 }
 
 // CounterRepository is the persistence boundary required by CounterService.
@@ -31,8 +36,8 @@ type CounterRepository interface {
 	CreateCounter(context.Context, *models.Counter) error
 	GetCounter(context.Context, string, string) (*models.Counter, error)
 	ListCounters(context.Context, string, *CounterCursor, int) ([]models.Counter, error)
-	IncrementCounter(context.Context, string, string, int64, time.Time) (int64, error)
-	SetCounterValue(context.Context, string, string, int64, time.Time) error
+	IncrementCounter(context.Context, string, string, int64, string, []byte, time.Time) (store.MutationResult, error)
+	SetCounterValueWithOperation(context.Context, string, string, int64, string, []byte, time.Time) (store.MutationResult, error)
 }
 
 // CounterService contains counter read and creation use cases independent of
@@ -42,7 +47,9 @@ type CounterService interface {
 	Get(context.Context, string, string) (*models.Counter, error)
 	List(context.Context, string, *CounterCursor, int) (CounterPage, error)
 	Increment(context.Context, string, string, int64) (*CounterMutationResult, error)
+	IncrementWithOperation(context.Context, string, string, int64, string) (*CounterMutationResult, error)
 	Set(context.Context, string, string, int64) (*CounterMutationResult, error)
+	SetWithOperation(context.Context, string, string, int64, string) (*CounterMutationResult, error)
 }
 
 type counterService struct {
@@ -125,32 +132,98 @@ func (s *counterService) List(ctx context.Context, tenantID string, cursor *Coun
 }
 
 func (s *counterService) Increment(ctx context.Context, tenantID, counterID string, delta int64) (*CounterMutationResult, error) {
-	counter, err := s.Get(ctx, tenantID, counterID)
-	if err != nil {
-		return nil, err
-	}
-	if delta > counter.MaxDelta {
-		return nil, ErrDeltaExceedsMaximum
+	return s.IncrementWithOperation(ctx, tenantID, counterID, delta, "")
+}
+
+func (s *counterService) IncrementWithOperation(ctx context.Context, tenantID, counterID string, delta int64, operationID string) (*CounterMutationResult, error) {
+	if operationID == "" {
+		operationID = s.newID()
 	}
 
 	now := s.now()
-	value, err := s.repository.IncrementCounter(ctx, tenantID, counterID, delta, now)
+	result, err := s.repository.IncrementCounter(ctx, tenantID, counterID, delta, operationID, incrementRequestHash(tenantID, counterID, delta), now)
 	if errors.Is(err, store.ErrCounterNotFound) {
 		return nil, ErrCounterNotFound
 	}
+	if errors.Is(err, store.ErrDeltaExceedsMaximum) {
+		return nil, ErrDeltaExceedsMaximum
+	}
+	if errors.Is(err, store.ErrCounterOverflow) {
+		return nil, ErrCounterOverflow
+	}
+	if errors.Is(err, store.ErrIdempotencyKeyReused) {
+		return nil, ErrIdempotencyKeyReused
+	}
+	if errors.Is(err, store.ErrOperationInProgress) {
+		return nil, ErrOperationInProgress
+	}
 	if err != nil {
 		return nil, err
 	}
-	return &CounterMutationResult{CounterID: counterID, Value: value, UpdatedAt: now}, nil
+	return &CounterMutationResult{
+		OperationID: result.OperationID,
+		CounterID:   counterID,
+		Delta:       result.Delta,
+		Value:       result.Value,
+		UpdatedAt:   result.UpdatedAt,
+		Replayed:    result.Replayed,
+	}, nil
 }
 
 func (s *counterService) Set(ctx context.Context, tenantID, counterID string, value int64) (*CounterMutationResult, error) {
+	return s.SetWithOperation(ctx, tenantID, counterID, value, "")
+}
+
+func (s *counterService) SetWithOperation(ctx context.Context, tenantID, counterID string, value int64, operationID string) (*CounterMutationResult, error) {
+	if operationID == "" {
+		operationID = s.newID()
+	}
+
 	now := s.now()
-	if err := s.repository.SetCounterValue(ctx, tenantID, counterID, value, now); err != nil {
-		if errors.Is(err, store.ErrCounterNotFound) {
-			return nil, ErrCounterNotFound
-		}
+	result, err := s.repository.SetCounterValueWithOperation(ctx, tenantID, counterID, value, operationID, setRequestHash(tenantID, counterID, value), now)
+	if errors.Is(err, store.ErrCounterNotFound) {
+		return nil, ErrCounterNotFound
+	}
+	if errors.Is(err, store.ErrIdempotencyKeyReused) {
+		return nil, ErrIdempotencyKeyReused
+	}
+	if errors.Is(err, store.ErrOperationInProgress) {
+		return nil, ErrOperationInProgress
+	}
+	if errors.Is(err, store.ErrCounterOverflow) {
+		return nil, ErrCounterOverflow
+	}
+	if err != nil {
 		return nil, err
 	}
-	return &CounterMutationResult{CounterID: counterID, Value: value, UpdatedAt: now}, nil
+	return &CounterMutationResult{
+		OperationID: result.OperationID,
+		CounterID:   counterID,
+		Delta:       result.Delta,
+		Value:       result.Value,
+		UpdatedAt:   result.UpdatedAt,
+		Replayed:    result.Replayed,
+	}, nil
+}
+
+func incrementRequestHash(tenantID, counterID string, delta int64) []byte {
+	return mutationRequestHash("increment", tenantID, counterID, delta)
+}
+
+func setRequestHash(tenantID, counterID string, value int64) []byte {
+	return mutationRequestHash("set", tenantID, counterID, value)
+}
+
+func mutationRequestHash(kind, tenantID, counterID string, value int64) []byte {
+	hash := sha256.New()
+	for _, field := range []string{"counter-operation-v1", kind, tenantID, counterID} {
+		var length [8]byte
+		binary.BigEndian.PutUint64(length[:], uint64(len(field)))
+		hash.Write(length[:])
+		hash.Write([]byte(field))
+	}
+	var encoded [8]byte
+	binary.BigEndian.PutUint64(encoded[:], uint64(value))
+	hash.Write(encoded[:])
+	return hash.Sum(nil)
 }

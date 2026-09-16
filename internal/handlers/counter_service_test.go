@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"context"
+	"counter/internal/contract"
 	"counter/internal/models"
 	"counter/internal/service"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -27,6 +29,7 @@ type fakeCounterService struct {
 	incrementTenantID  string
 	incrementCounterID string
 	incrementDelta     int64
+	incrementOperation string
 	incrementResult    *service.CounterMutationResult
 	incrementErr       error
 	setTenantID        string
@@ -62,7 +65,22 @@ func (f *fakeCounterService) Increment(_ context.Context, tenantID, counterID st
 	return f.incrementResult, f.incrementErr
 }
 
+func (f *fakeCounterService) IncrementWithOperation(_ context.Context, tenantID, counterID string, delta int64, operationID string) (*service.CounterMutationResult, error) {
+	f.incrementTenantID = tenantID
+	f.incrementCounterID = counterID
+	f.incrementDelta = delta
+	f.incrementOperation = operationID
+	return f.incrementResult, f.incrementErr
+}
+
 func (f *fakeCounterService) Set(_ context.Context, tenantID, counterID string, value int64) (*service.CounterMutationResult, error) {
+	f.setTenantID = tenantID
+	f.setCounterID = counterID
+	f.setValue = value
+	return f.setResult, f.setErr
+}
+
+func (f *fakeCounterService) SetWithOperation(_ context.Context, tenantID, counterID string, value int64, _ string) (*service.CounterMutationResult, error) {
 	f.setTenantID = tenantID
 	f.setCounterID = counterID
 	f.setValue = value
@@ -148,6 +166,55 @@ func TestIncrementCounterServiceHandlerUsesCounterService(t *testing.T) {
 	}
 	if fake.incrementTenantID != tenantID || fake.incrementCounterID != counterID || fake.incrementDelta != 5 {
 		t.Fatalf("service increment request = %q/%q/%d", fake.incrementTenantID, fake.incrementCounterID, fake.incrementDelta)
+	}
+}
+
+func TestIncrementCounterV2RequiresIdempotencyKey(t *testing.T) {
+	const tenantID = "123e4567-e89b-12d3-a456-426614174000"
+	const counterID = "123e4567-e89b-12d3-a456-426614174001"
+	fake := &fakeCounterService{}
+	handler := IncrementCounterServiceHandlerVersioned(fake, contract.V2)
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.SetUserValue("tenant_id", tenantID)
+	ctx.SetUserValue("counter_id", counterID)
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID + "/inc")
+	handler(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", ctx.Response.StatusCode(), fasthttp.StatusBadRequest)
+	}
+	if string(ctx.Response.Body()) == "" {
+		t.Fatal("expected idempotency-key error response")
+	}
+}
+
+func TestIncrementCounterV2PassesIdempotencyKey(t *testing.T) {
+	const tenantID = "123e4567-e89b-12d3-a456-426614174000"
+	const counterID = "123e4567-e89b-12d3-a456-426614174001"
+	const key = "01912345-6789-7000-8000-000000000003"
+	fake := &fakeCounterService{incrementResult: &service.CounterMutationResult{CounterID: counterID, OperationID: key, Delta: 5, Value: 12}}
+	handler := IncrementCounterServiceHandlerVersioned(fake, contract.V2)
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.SetUserValue("tenant_id", tenantID)
+	ctx.SetUserValue("counter_id", counterID)
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=5")
+	ctx.Request.Header.Set("Idempotency-Key", key)
+	handler(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Fatalf("status = %d, want %d", ctx.Response.StatusCode(), fasthttp.StatusOK)
+	}
+	if fake.incrementOperation != key {
+		t.Fatalf("operation ID = %q, want %q", fake.incrementOperation, key)
+	}
+	var response models.IncrementResponse
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.OperationID != key || response.Delta != 5 || response.Value != 12 {
+		t.Fatalf("response = %#v", response)
 	}
 }
 

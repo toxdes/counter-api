@@ -22,9 +22,9 @@ Public endpoints do not require authentication but are rate-limited.
 
 The existing unversioned routes are V1 and remain supported for backward
 compatibility. V1 accepts an optional `Idempotency-Key`; clients that provide a
-valid UUID receive idempotency protection once the durable mutation path is
-enabled. Requests without a key remain supported, but transport retries cannot
-be proven to represent the same logical mutation.
+valid UUID receive idempotency protection. Requests without a key remain
+supported, but transport retries cannot be proven to represent the same logical
+mutation.
 
 Contract changes that require stricter behavior are introduced under `/v2`.
 See [the V2 API reference](api-v2.md).
@@ -174,6 +174,7 @@ Sets a counter to a specific value. Requires API key.
 ```http
 POST /tenants/{tenant_id}/counters/{counter_id}/set
 X-API-Key: your-api-key
+Idempotency-Key: 01912345-6789-7000-8000-000000000004 (optional)
 Content-Type: application/json
 
 {
@@ -188,8 +189,11 @@ Content-Type: application/json
 Content-Type: application/json
 
 {
+  "operation_id": "01912345-6789-7000-8000-000000000004",
   "counter_id": "01912345-6789-7000-8000-000000000002",
+  "delta": 53,
   "value": 100,
+  "replayed": false,
   "updated_at": "2026-04-07T12:03:00Z"
 }
 ```
@@ -288,8 +292,11 @@ Content-Type: application/json
 Content-Type: application/json
 
 {
+  "operation_id": "01912345-6789-7000-8000-000000000003",
   "counter_id": "01912345-6789-7000-8000-000000000002",
+  "delta": 5,
   "value": 47,
+  "replayed": false,
   "updated_at": "2026-04-07T12:02:00Z"
 }
 ```
@@ -313,6 +320,8 @@ Content-Type: application/json
 | `IDEMPOTENCY_KEY_REQUIRED` | V2 mutation is missing the required idempotency key |
 | `INVALID_IDEMPOTENCY_KEY` | Idempotency key is not a valid UUID |
 | `IDEMPOTENCY_KEY_REUSED` | Idempotency key was reused with different request data |
+| `OPERATION_IN_PROGRESS` | The idempotent operation is currently being completed |
+| `COUNTER_OVERFLOW` | The resulting counter value is outside the supported range |
 
 ## Rate Limiting
 

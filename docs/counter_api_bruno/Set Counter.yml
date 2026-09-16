@@ -11,6 +11,8 @@ http:
       value: application/json
     - name: X-Api-Key
       value: "{{API_KEY}}"
+    - name: Idempotency-Key
+      value: 01912345-6789-7000-8000-000000000004
   body:
     type: json
     data: |-
@@ -60,8 +62,11 @@ docs: |-
   ## Response (200 OK)
   ```json
   {
+    "operation_id": "01912345-6789-7000-8000-000000000004",
     "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
+    "delta": 53,
     "value": 100,
+    "replayed": false,
     "updated_at": "2026-04-08T10:35:50Z"
   }
   ```
@@ -72,4 +77,6 @@ docs: |-
   - 400 INVALID_VALUE - Value is out of valid range
   - 404 COUNTER_NOT_FOUND - Counter does not exist
   - 401 UNAUTHORIZED - Missing or invalid API key
+  - 409 IDEMPOTENCY_KEY_REUSED - Idempotency key was reused with different request data
+  - 409 OPERATION_IN_PROGRESS - The operation is already being completed
   - 429 RATE_LIMIT_EXCEEDED - Too many requests

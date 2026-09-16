@@ -12,6 +12,8 @@ func TestSharedRouteSurfaceIsComplete(t *testing.T) {
 		"GET /tenants/<tenant_id>/counters/<counter_id>",
 		"POST /tenants/<tenant_id>/counters/<counter_id>/inc",
 		"POST /tenants/<tenant_id>/counters/<counter_id>/set",
+		"POST /v2/tenants/<tenant_id>/counters/<counter_id>/inc",
+		"POST /v2/tenants/<tenant_id>/counters/<counter_id>/set",
 		"OPTIONS /*",
 	}
 	if got := sharedRouteSurface(); len(got) != len(want) {

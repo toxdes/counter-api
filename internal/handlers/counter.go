@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"counter/internal/cache"
+	"counter/internal/contract"
 	"counter/internal/database"
 	"counter/internal/models"
 	"counter/internal/service"
@@ -12,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -77,6 +79,12 @@ func IncrementCounterHandler(db *database.DB) fasthttp.RequestHandler {
 
 // IncrementCounterServiceHandler handles increments through the counter service boundary.
 func IncrementCounterServiceHandler(counterService service.CounterService) fasthttp.RequestHandler {
+	return IncrementCounterServiceHandlerVersioned(counterService, contract.V1)
+}
+
+// IncrementCounterServiceHandlerVersioned applies the version-specific
+// idempotency-key contract while sharing the durable mutation path.
+func IncrementCounterServiceHandlerVersioned(counterService service.CounterService, version contract.Version) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		tenantID, ok := ctx.UserValue("tenant_id").(string)
 		if !ok || tenantID == "" {
@@ -111,7 +119,23 @@ func IncrementCounterServiceHandler(counterService service.CounterService) fasth
 			delta = parsed
 		}
 
-		result, err := counterService.Increment(context.Background(), tenantID, counterID, delta)
+		idempotencyKey := strings.TrimSpace(string(ctx.Request.Header.Peek("Idempotency-Key")))
+		if err := contract.ValidateIdempotencyKey(version, idempotencyKey); err != nil {
+			if errors.Is(err, contract.ErrIdempotencyKeyRequired) {
+				respondWithError(ctx, fasthttp.StatusBadRequest, "IDEMPOTENCY_KEY_REQUIRED", err.Error())
+			} else {
+				respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY", err.Error())
+			}
+			return
+		}
+
+		var result *service.CounterMutationResult
+		var err error
+		if idempotencyKey == "" {
+			result, err = counterService.Increment(context.Background(), tenantID, counterID, delta)
+		} else {
+			result, err = counterService.IncrementWithOperation(context.Background(), tenantID, counterID, delta, idempotencyKey)
+		}
 		if errors.Is(err, service.ErrCounterNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
 			return
@@ -120,15 +144,30 @@ func IncrementCounterServiceHandler(counterService service.CounterService) fasth
 			respondWithError(ctx, fasthttp.StatusBadRequest, ErrorCodeDeltaExceedsMaximum, "Delta exceeds maximum allowed value")
 			return
 		}
+		if errors.Is(err, service.ErrCounterOverflow) {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "COUNTER_OVERFLOW", "Increment would exceed the counter value range")
+			return
+		}
+		if errors.Is(err, service.ErrIdempotencyKeyReused) {
+			respondWithError(ctx, fasthttp.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "Idempotency key was reused with different request data")
+			return
+		}
+		if errors.Is(err, service.ErrOperationInProgress) {
+			respondWithError(ctx, fasthttp.StatusConflict, "OPERATION_IN_PROGRESS", "The operation is already in progress")
+			return
+		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to increment counter")
+			respondWithError(ctx, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Counter service is temporarily unavailable")
 			return
 		}
 
 		resp := &models.IncrementResponse{
-			CounterID: counterID,
-			Value:     result.Value,
-			UpdatedAt: result.UpdatedAt,
+			OperationID: result.OperationID,
+			CounterID:   counterID,
+			Delta:       result.Delta,
+			Value:       result.Value,
+			Replayed:    result.Replayed,
+			UpdatedAt:   result.UpdatedAt,
 		}
 
 		respondWithJSON(ctx, fasthttp.StatusOK, resp)
@@ -142,6 +181,12 @@ func SetCounterValueHandler(db *database.DB) fasthttp.RequestHandler {
 
 // SetCounterServiceHandler handles counter value changes through the counter service boundary.
 func SetCounterServiceHandler(counterService service.CounterService) fasthttp.RequestHandler {
+	return SetCounterServiceHandlerVersioned(counterService, contract.V1)
+}
+
+// SetCounterServiceHandlerVersioned applies the version-specific idempotency
+// contract while recording the adjustment durably.
+func SetCounterServiceHandlerVersioned(counterService service.CounterService, version contract.Version) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		tenantID, ok := ctx.UserValue("tenant_id").(string)
 		if !ok || tenantID == "" {
@@ -183,20 +228,51 @@ func SetCounterServiceHandler(counterService service.CounterService) fasthttp.Re
 			return
 		}
 
-		result, err := counterService.Set(context.Background(), tenantID, counterID, *req.Value)
+		idempotencyKey := strings.TrimSpace(string(ctx.Request.Header.Peek("Idempotency-Key")))
+		if err := contract.ValidateIdempotencyKey(version, idempotencyKey); err != nil {
+			if errors.Is(err, contract.ErrIdempotencyKeyRequired) {
+				respondWithError(ctx, fasthttp.StatusBadRequest, "IDEMPOTENCY_KEY_REQUIRED", err.Error())
+			} else {
+				respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY", err.Error())
+			}
+			return
+		}
+
+		var result *service.CounterMutationResult
+		var err error
+		if idempotencyKey == "" {
+			result, err = counterService.Set(context.Background(), tenantID, counterID, *req.Value)
+		} else {
+			result, err = counterService.SetWithOperation(context.Background(), tenantID, counterID, *req.Value, idempotencyKey)
+		}
 		if errors.Is(err, service.ErrCounterNotFound) {
 			respondWithError(ctx, fasthttp.StatusNotFound, "COUNTER_NOT_FOUND", "Counter not found")
 			return
 		}
+		if errors.Is(err, service.ErrCounterOverflow) {
+			respondWithError(ctx, fasthttp.StatusBadRequest, "COUNTER_OVERFLOW", "Counter value change exceeds the supported range")
+			return
+		}
+		if errors.Is(err, service.ErrIdempotencyKeyReused) {
+			respondWithError(ctx, fasthttp.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "Idempotency key was reused with different request data")
+			return
+		}
+		if errors.Is(err, service.ErrOperationInProgress) {
+			respondWithError(ctx, fasthttp.StatusConflict, "OPERATION_IN_PROGRESS", "The operation is already in progress")
+			return
+		}
 		if err != nil {
-			respondWithError(ctx, fasthttp.StatusInternalServerError, "DATABASE_ERROR", "Failed to set counter value")
+			respondWithError(ctx, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Counter service is temporarily unavailable")
 			return
 		}
 
 		resp := &models.SetValueResponse{
-			CounterID: counterID,
-			Value:     result.Value,
-			UpdatedAt: result.UpdatedAt,
+			OperationID: result.OperationID,
+			CounterID:   counterID,
+			Delta:       result.Delta,
+			Value:       result.Value,
+			Replayed:    result.Replayed,
+			UpdatedAt:   result.UpdatedAt,
 		}
 
 		respondWithJSON(ctx, fasthttp.StatusOK, resp)
