@@ -28,8 +28,8 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("Load() failed with defaults: %v", err)
 	}
 
-	if cfg.ServerHost != "0.0.0.0" {
-		t.Errorf("Expected ServerHost default '0.0.0.0', got '%s'", cfg.ServerHost)
+	if cfg.ServerHost != "127.0.0.1" {
+		t.Errorf("Expected ServerHost default '127.0.0.1', got '%s'", cfg.ServerHost)
 	}
 	if cfg.ServerPort != 8080 {
 		t.Errorf("Expected ServerPort default 8080, got %d", cfg.ServerPort)
@@ -102,8 +102,8 @@ func TestCacheDefaults(t *testing.T) {
 		t.Fatalf("Load() failed: %v", err)
 	}
 
-	if !cfg.CacheEnabled {
-		t.Error("Expected CacheEnabled default true, got false")
+	if cfg.CacheEnabled {
+		t.Error("Expected CacheEnabled default false, got true")
 	}
 	if cfg.CacheSize != 1000 {
 		t.Errorf("Expected CacheSize default 1000, got %d", cfg.CacheSize)
@@ -185,10 +185,12 @@ func TestCacheValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
 			os.Setenv("API_KEY", "test-key")
+			os.Setenv("CACHE_ENABLED", "true")
 			os.Setenv(tt.envVar, tt.value)
 			defer func() {
 				os.Unsetenv("DATABASE_URL")
 				os.Unsetenv("API_KEY")
+				os.Unsetenv("CACHE_ENABLED")
 				os.Unsetenv(tt.envVar)
 			}()
 
@@ -284,10 +286,12 @@ func TestSentryValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
 			os.Setenv("API_KEY", "test-key")
+			os.Setenv("CACHE_ENABLED", "true")
 			os.Setenv(tt.envVar, tt.value)
 			defer func() {
 				os.Unsetenv("DATABASE_URL")
 				os.Unsetenv("API_KEY")
+				os.Unsetenv("CACHE_ENABLED")
 				os.Unsetenv(tt.envVar)
 			}()
 

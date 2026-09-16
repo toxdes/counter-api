@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -76,7 +77,7 @@ func TestShouldCaptureError(t *testing.T) {
 		{
 			name:           "429 rate limit exceeded",
 			statusCode:     429,
-			expectedResult: true,
+			expectedResult: false,
 		},
 		{
 			name:           "404 not found",
@@ -176,7 +177,7 @@ func TestNewSentryHandler_ErrorCapture(t *testing.T) {
 		{"500 Internal Server Error", 500, true},
 		{"502 Bad Gateway", 502, true},
 		{"503 Service Unavailable", 503, true},
-		{"429 Too Many Requests", 429, true},
+		{"429 Too Many Requests", 429, false},
 		{"404 Not Found", 404, false},
 		{"400 Bad Request", 400, false},
 		{"200 OK", 200, false},
@@ -229,6 +230,83 @@ func TestNewSentryHandler_ErrorCapture(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExtractHeadersAllowlistExcludesSecrets(t *testing.T) {
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.Set("X-Request-ID", "request-123")
+	ctx.Request.Header.Set("User-Agent", "test-agent")
+	ctx.Request.Header.Set("CF-Ray", "ray-123")
+	ctx.Request.Header.Set("X-API-Key", "super-secret-api-key")
+	ctx.Request.Header.Set("Authorization", "Bearer super-secret-token")
+	ctx.Request.Header.Set("Cookie", "session=super-secret-cookie")
+	ctx.Request.Header.Set("X-Forwarded-For", "198.51.100.10")
+
+	headers := extractHeaders(ctx)
+
+	assert.Equal(t, "request-123", headers["X-Request-ID"])
+	assert.Equal(t, "test-agent", headers["User-Agent"])
+	assert.Equal(t, "ray-123", headers["CF-Ray"])
+	for _, sensitive := range []string{"X-API-Key", "Authorization", "Cookie", "X-Forwarded-For"} {
+		if _, ok := headers[sensitive]; ok {
+			t.Errorf("sensitive header %q was included in telemetry", sensitive)
+		}
+	}
+}
+
+func TestScrubSentryEventRemovesRequestSecrets(t *testing.T) {
+	event := &sentry.Event{
+		Request: &sentry.Request{
+			URL:         "https://api.example.com/tenants/t1/counters/c1?api_key=secret",
+			Data:        `{"api_key":"secret"}`,
+			QueryString: "api_key=secret",
+			Cookies:     "session=secret",
+			Env:         map[string]string{"REMOTE_ADDR": "198.51.100.10"},
+			Headers: map[string]string{
+				"Host":          "api.example.com",
+				"Authorization": "Bearer secret",
+				"Cookie":        "session=secret",
+				"X-Request-ID":  "request-123",
+			},
+		},
+		Contexts: map[string]sentry.Context{
+			"fasthttp": {
+				"method":  "POST",
+				"url":     "https://api.example.com/?token=secret",
+				"headers": map[string]string{"Authorization": "Bearer secret"},
+			},
+		},
+	}
+
+	scrubbed := ScrubSentryEvent(event, nil)
+	require.NotNil(t, scrubbed)
+	require.NotNil(t, scrubbed.Request)
+	assert.Equal(t, "https://api.example.com/tenants/t1/counters/c1", scrubbed.Request.URL)
+	assert.Empty(t, scrubbed.Request.Data)
+	assert.Empty(t, scrubbed.Request.QueryString)
+	assert.Empty(t, scrubbed.Request.Cookies)
+	assert.Nil(t, scrubbed.Request.Env)
+	assert.Equal(t, map[string]string{
+		"Host":         "api.example.com",
+		"X-Request-ID": "request-123",
+	}, scrubbed.Request.Headers)
+	assert.Equal(t, sentry.Context{"method": "POST"}, scrubbed.Contexts["fasthttp"])
+}
+
+func TestSentryClientIPUsesTrustedForwardedIdentity(t *testing.T) {
+	ctx := &fasthttp.RequestCtx{}
+	ctx.SetRemoteAddr(&net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080})
+	ctx.Request.Header.Set("X-Real-IP", "198.51.100.10")
+
+	assert.Equal(t, "198.51.100.10", sentryClientIP(ctx))
+}
+
+func TestSentryClientIPRejectsForwardedIdentityFromPrivatePeer(t *testing.T) {
+	ctx := &fasthttp.RequestCtx{}
+	ctx.SetRemoteAddr(&net.TCPAddr{IP: net.ParseIP("192.168.1.20"), Port: 8080})
+	ctx.Request.Header.Set("X-Real-IP", "198.51.100.10")
+
+	assert.Equal(t, "192.168.1.20", sentryClientIP(ctx))
 }
 
 // TestNewSentryHandler_ContextExtraction tests that context is properly extracted

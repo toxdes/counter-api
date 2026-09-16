@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/getsentry/sentry-go"
@@ -51,10 +52,6 @@ func shouldCaptureError(statusCode int) bool {
 	if statusCode >= 500 && statusCode < 600 {
 		return true
 	}
-	// Capture 429 rate limit errors
-	if statusCode == 429 {
-		return true
-	}
 	return false
 }
 
@@ -89,8 +86,10 @@ func NewSentryHandler(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 			tenantID, counterID = extractSentryContext(ctx)
 		}()
 
-		// Get client IP
-		clientIP := ctx.RemoteAddr().String()
+		// Get the canonical visitor IP. The app receives requests from local
+		// nginx, so RemoteIP alone would identify the proxy rather than the
+		// visitor.
+		clientIP := sentryClientIP(ctx)
 
 		// Configure scope with request context (defensive)
 		func() {
@@ -165,11 +164,113 @@ func NewSentryHandler(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	})
 }
 
+// sentryClientIP returns the visitor identity established by the trusted
+// loopback nginx proxy. Forwarding headers from any other peer are ignored.
+func sentryClientIP(ctx *fasthttp.RequestCtx) string {
+	remoteIP := ctx.RemoteIP()
+	if remoteIP != nil && remoteIP.IsLoopback() {
+		if ip := net.ParseIP(strings.TrimSpace(string(ctx.Request.Header.Peek("X-Real-IP")))); ip != nil {
+			return ip.String()
+		}
+
+		if forwarded := ctx.Request.Header.Peek("X-Forwarded-For"); len(forwarded) > 0 {
+			for _, candidate := range strings.Split(string(forwarded), ",") {
+				if ip := net.ParseIP(strings.TrimSpace(candidate)); ip != nil {
+					return ip.String()
+				}
+			}
+		}
+	}
+
+	if remoteIP == nil {
+		return ""
+	}
+	return remoteIP.String()
+}
+
 // extractHeaders extracts HTTP headers from fasthttp context
 func extractHeaders(ctx *fasthttp.RequestCtx) map[string]string {
 	headers := make(map[string]string)
+	allowed := map[string]string{
+		"x-request-id": "X-Request-ID",
+		"user-agent":   "User-Agent",
+		"cf-ray":       "CF-Ray",
+		"content-type": "Content-Type",
+	}
+
 	ctx.Request.Header.VisitAll(func(key, value []byte) {
-		headers[string(key)] = string(value)
+		name, ok := allowed[strings.ToLower(string(key))]
+		if !ok {
+			return
+		}
+
+		// Keep attacker-controlled telemetry fields bounded.
+		safeValue := string(value)
+		if len(safeValue) > 256 {
+			safeValue = safeValue[:256]
+		}
+		headers[name] = safeValue
 	})
 	return headers
+}
+
+// ScrubSentryEvent is a defense-in-depth scrubber for request data. The
+// fasthttp Sentry integration attaches the full request before application
+// middleware runs, so custom context filtering alone is insufficient.
+func ScrubSentryEvent(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+	if event == nil {
+		return nil
+	}
+
+	if request := event.Request; request != nil {
+		request.Data = ""
+		request.QueryString = ""
+		request.Cookies = ""
+		request.Env = nil
+		request.Headers = scrubSentryHeaders(request.Headers)
+		if queryStart := strings.IndexByte(request.URL, '?'); queryStart >= 0 {
+			request.URL = request.URL[:queryStart]
+		}
+	}
+
+	// The custom fasthttp context historically contained the full URL,
+	// query string, and every request header. Retain only a safe method field;
+	// route and identity are already represented by bounded tags.
+	if event.Contexts != nil {
+		if context, ok := event.Contexts["fasthttp"]; ok {
+			safeContext := sentry.Context{}
+			if method, ok := context["method"].(string); ok {
+				safeContext["method"] = method
+			}
+			event.Contexts["fasthttp"] = safeContext
+		}
+	}
+
+	return event
+}
+
+func scrubSentryHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	allowed := map[string]string{
+		"host":         "Host",
+		"x-request-id": "X-Request-ID",
+		"user-agent":   "User-Agent",
+		"cf-ray":       "CF-Ray",
+		"content-type": "Content-Type",
+	}
+	safeHeaders := make(map[string]string)
+	for key, value := range headers {
+		name, ok := allowed[strings.ToLower(key)]
+		if !ok {
+			continue
+		}
+		if len(value) > 256 {
+			value = value[:256]
+		}
+		safeHeaders[name] = value
+	}
+	return safeHeaders
 }

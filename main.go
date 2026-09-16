@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"counter/internal/cache"
 	"counter/internal/config"
 	"counter/internal/database"
@@ -8,7 +9,6 @@ import (
 	"counter/internal/migrations"
 	"counter/internal/models"
 	"counter/internal/router"
-	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -118,6 +118,7 @@ func main() {
 			Release:          sentryRelease,
 			SampleRate:       cfg.SentrySampleRate,
 			TracesSampleRate: cfg.SentrySampleRate,
+			BeforeSend:       middleware.ScrubSentryEvent,
 		})
 		if err != nil {
 			log.Printf("Sentry initialization failed: %v", err)
@@ -156,15 +157,15 @@ func main() {
 	var cachedCounter *cache.CachedCounter
 	ctx := context.Background()
 
-		// Helper function to find last index of a byte in a string
-		indexLast := func(s string, sep byte) int {
-			for i := len(s) - 1; i >= 0; i-- {
-				if s[i] == sep {
-					return i
-				}
+	// Helper function to find last index of a byte in a string
+	indexLast := func(s string, sep byte) int {
+		for i := len(s) - 1; i >= 0; i-- {
+			if s[i] == sep {
+				return i
 			}
-			return -1
 		}
+		return -1
+	}
 
 	if cfg.CacheEnabled {
 		log.Printf("Initializing cache (size=%d, workers=%d, queue=%d, ttl=%ds)",

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -50,6 +51,7 @@ func TestTokenBucketRefill(t *testing.T) {
 		postRefillRate: 10,
 		getRefillRate:  30,
 		lastRefill:     time.Now().Add(-time.Second),
+		getLastRefill:  time.Now().Add(-time.Second),
 	}
 
 	// Should refill POST tokens
@@ -104,5 +106,44 @@ func TestRateLimiterCleanup(t *testing.T) {
 
 	if exists {
 		t.Error("Old entry should be cleaned up")
+	}
+}
+
+func TestRateLimiterExistingKeyAtCapacityDoesNotPanic(t *testing.T) {
+	rl := NewRateLimiter(10, 1, 60)
+
+	for i := 0; i < MaxStoreEntries; i++ {
+		rl.AllowRequest(fmt.Sprintf("key-%d", i), false)
+	}
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("existing key at capacity panicked: %v", recovered)
+		}
+	}()
+
+	// Once at capacity, an existing key must still be handled normally.
+	rl.AllowRequest("key-0", false)
+}
+
+func TestTokenBucketDeniedRequestDoesNotResetRefillProgress(t *testing.T) {
+	lastRefill := time.Now().Add(-5 * time.Second)
+	tb := &tokenBucket{
+		postTokens:     0,
+		getTokens:      0,
+		maxPostTokens:  10,
+		maxGetTokens:   30,
+		postRefillRate: 10,
+		getRefillRate:  30,
+		lastRefill:     lastRefill,
+		window:         60 * time.Second,
+	}
+
+	if allowed, _ := tb.allowRequest(false); allowed {
+		t.Fatal("request should be denied before a complete refill quantum")
+	}
+
+	if !tb.lastRefill.Equal(lastRefill) {
+		t.Fatalf("denied request reset refill progress: before=%v after=%v", lastRefill, tb.lastRefill)
 	}
 }

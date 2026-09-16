@@ -22,6 +22,10 @@ internal/handlers/docs.html
 logs/
 *.log
 
+# Local Markdown notes and temporary findings.
+# Existing Markdown files remain tracked by Git.
+*.md
+
 # Go workspace file
 go.work
 

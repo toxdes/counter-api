@@ -198,28 +198,10 @@ func getClientIP(ctx *fasthttp.RequestCtx) string {
 
 // isTrustedProxy checks if an IP is from a trusted proxy
 func isTrustedProxy(ip net.IP) bool {
-	if ip.IsLoopback() {
-		return true
-	}
-
-	if ip.IsPrivate() {
-		return true
-	}
-
-	// IPv4 private ranges
-	if ip4 := ip.To4(); ip4 != nil {
-		if ip4[0] == 10 {
-			return true
-		}
-		if ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31 {
-			return true
-		}
-		if ip4[0] == 192 && ip4[1] == 168 {
-			return true
-		}
-	}
-
-	return false
+	// The Go process is bound to loopback and nginx is its only trusted
+	// forwarding proxy. Private-network addresses are not trusted because a
+	// directly connected peer could otherwise spoof forwarding headers.
+	return ip != nil && ip.IsLoopback()
 }
 
 // NewCachedRouter creates a new router with caching enabled

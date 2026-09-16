@@ -34,6 +34,7 @@ type tokenBucket struct {
 	postRefillRate int
 	getRefillRate  int
 	lastRefill     time.Time
+	getLastRefill  time.Time
 	window         time.Duration
 	mu             sync.Mutex
 }
@@ -53,22 +54,16 @@ func NewRateLimiter(maxRequests int, getMultiplier int, windowSeconds int) *Rate
 func (rl *RateLimiter) AllowRequest(ip string, isGet bool) (bool, int) {
 	rl.mu.Lock()
 
-	// Prevent unbounded map growth - reject if too many entries
-	if len(rl.store) >= MaxStoreEntries {
-		rl.mu.Unlock()
-		// Check if IP already exists (common case)
-		rl.mu.RLock()
-		_, exists := rl.store[ip]
-		rl.mu.RUnlock()
-
-		if !exists {
-			// At capacity, reject request with short retry
-			return false, 60
-		}
-	}
-
 	bucket, exists := rl.store[ip]
 	if !exists {
+		// Prevent unbounded map growth while allowing existing keys to
+		// continue through their normal bucket path.
+		if len(rl.store) >= MaxStoreEntries {
+			rl.mu.Unlock()
+			return false, 60
+		}
+
+		now := time.Now()
 		bucket = &tokenBucket{
 			postTokens:     rl.maxRequests,
 			getTokens:      rl.maxGetRequests,
@@ -76,7 +71,8 @@ func (rl *RateLimiter) AllowRequest(ip string, isGet bool) (bool, int) {
 			maxGetTokens:   rl.maxGetRequests,
 			postRefillRate: rl.maxRequests,
 			getRefillRate:  rl.maxGetRequests,
-			lastRefill:     time.Now(),
+			lastRefill:     now,
+			getLastRefill:  now,
 			window:         rl.window,
 		}
 		rl.store[ip] = bucket
@@ -96,7 +92,11 @@ func (rl *RateLimiter) Cleanup(maxAge time.Duration) {
 
 	for ip, bucket := range rl.store {
 		bucket.mu.Lock()
-		if now.Sub(bucket.lastRefill) > maxAge {
+		lastActivity := bucket.lastRefill
+		if bucket.getLastRefill.After(lastActivity) {
+			lastActivity = bucket.getLastRefill
+		}
+		if now.Sub(lastActivity) > maxAge {
 			ipsToDelete = append(ipsToDelete, ip)
 		}
 		bucket.mu.Unlock()
@@ -126,29 +126,18 @@ func (tb *tokenBucket) allowRequest(isGet bool) (bool, int) {
 	defer tb.mu.Unlock()
 
 	now := time.Now()
-	elapsed := now.Sub(tb.lastRefill)
-
-	// Refill tokens based on elapsed time
 	window := tb.window
 	if window == 0 {
 		// Default to 1 second window if not set (for test compatibility)
 		window = time.Second
 	}
 
-	if elapsed > 0 {
-		postRefillAmount := int(elapsed.Seconds()) * tb.postRefillRate / int(window.Seconds())
-		getRefillAmount := int(elapsed.Seconds()) * tb.getRefillRate / int(window.Seconds())
-
-		tb.postTokens += postRefillAmount
-		tb.getTokens += getRefillAmount
-
-		if tb.postTokens > tb.maxPostTokens {
-			tb.postTokens = tb.maxPostTokens
-		}
-		if tb.getTokens > tb.maxGetTokens {
-			tb.getTokens = tb.maxGetTokens
-		}
-		tb.lastRefill = now
+	// Refill only the bucket being consumed. Each bucket keeps its own
+	// progress so traffic in one bucket cannot reset the other bucket.
+	if isGet {
+		tb.refillGet(now, window)
+	} else {
+		tb.refillPost(now, window)
 	}
 
 	// Check and consume appropriate token
@@ -164,12 +153,83 @@ func (tb *tokenBucket) allowRequest(isGet bool) (bool, int) {
 		}
 	}
 
-	// Calculate retry after
-	retryAfter := int(window.Seconds() - elapsed.Seconds())
-	if retryAfter < 0 {
-		retryAfter = 0
+	return false, tb.retryAfter(isGet, now, window)
+}
+
+func (tb *tokenBucket) refillPost(now time.Time, window time.Duration) {
+	if tb.postRefillRate <= 0 {
+		return
 	}
-	return false, retryAfter
+	interval := refillInterval(window, tb.postRefillRate)
+	elapsed := now.Sub(tb.lastRefill)
+	if elapsed < interval {
+		return
+	}
+
+	amount := int(elapsed / interval)
+	tb.postTokens += amount
+	if tb.postTokens > tb.maxPostTokens {
+		tb.postTokens = tb.maxPostTokens
+	}
+	tb.lastRefill = tb.lastRefill.Add(time.Duration(amount) * interval)
+}
+
+func (tb *tokenBucket) refillGet(now time.Time, window time.Duration) {
+	if tb.getRefillRate <= 0 {
+		return
+	}
+	lastRefill := tb.getLastRefill
+	if lastRefill.IsZero() {
+		lastRefill = tb.lastRefill
+	}
+	interval := refillInterval(window, tb.getRefillRate)
+	elapsed := now.Sub(lastRefill)
+	if elapsed < interval {
+		return
+	}
+
+	amount := int(elapsed / interval)
+	tb.getTokens += amount
+	if tb.getTokens > tb.maxGetTokens {
+		tb.getTokens = tb.maxGetTokens
+	}
+	tb.getLastRefill = lastRefill.Add(time.Duration(amount) * interval)
+}
+
+func (tb *tokenBucket) retryAfter(isGet bool, now time.Time, window time.Duration) int {
+	var tokens, refillRate int
+	lastRefill := tb.lastRefill
+	if isGet {
+		tokens = tb.getTokens
+		refillRate = tb.getRefillRate
+		if !tb.getLastRefill.IsZero() {
+			lastRefill = tb.getLastRefill
+		}
+	} else {
+		tokens = tb.postTokens
+		refillRate = tb.postRefillRate
+	}
+
+	if tokens > 0 || refillRate <= 0 {
+		return 1
+	}
+
+	remaining := refillInterval(window, refillRate) - now.Sub(lastRefill)
+	if remaining < 0 {
+		remaining = 0
+	}
+	return int((remaining + time.Second - 1) / time.Second)
+}
+
+func refillInterval(window time.Duration, refillRate int) time.Duration {
+	if refillRate <= 0 {
+		return window
+	}
+	interval := window / time.Duration(refillRate)
+	if interval < time.Nanosecond {
+		return time.Nanosecond
+	}
+	return interval
 }
 
 // AllowRequest checks if a request should be allowed (test helper method)

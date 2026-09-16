@@ -54,7 +54,10 @@ type Config struct {
 // Load loads configuration from environment variables with sensible defaults
 func Load() (*Config, error) {
 	cfg := &Config{
-		ServerHost: getEnv("SERVER_HOST", "0.0.0.0"),
+		// Bind locally by default. Deployments that intentionally expose the
+		// process directly (for example, a local development container) can
+		// explicitly set SERVER_HOST=0.0.0.0.
+		ServerHost: getEnv("SERVER_HOST", "127.0.0.1"),
 		ServerPort: getEnvInt("SERVER_PORT", 8080),
 
 		DatabaseURL:    getEnv("DATABASE_URL", ""),
@@ -76,7 +79,10 @@ func Load() (*Config, error) {
 
 		LogLevel: getEnv("LOG_LEVEL", "info"),
 
-		CacheEnabled:      getEnvBool("CACHE_ENABLED", true),
+		// Write-behind caching is not safe: it can acknowledge operations
+		// before PostgreSQL commits them. Read caching remains opt-in until a
+		// durable, non-authoritative cache path is implemented.
+		CacheEnabled:      getEnvBool("CACHE_ENABLED", false),
 		CacheSize:         getEnvInt("CACHE_SIZE", 1000),
 		CacheTTLSeconds:   getEnvInt("CACHE_TTL_SECONDS", 300),
 		CacheWorkers:      getEnvInt("CACHE_WORKERS", 2),
@@ -98,6 +104,18 @@ func Load() (*Config, error) {
 	}
 	if cfg.RateLimitGetMultiplier < 1 {
 		return nil, fmt.Errorf("RATE_LIMIT_GET_MULTIPLIER must be at least 1")
+	}
+	if cfg.RateLimitRequests < 1 {
+		return nil, fmt.Errorf("RATE_LIMIT_REQUESTS must be at least 1")
+	}
+	if cfg.RateLimitWindow < 1 {
+		return nil, fmt.Errorf("RATE_LIMIT_WINDOW must be at least 1 second")
+	}
+	if cfg.RateLimitCleanup < 1 {
+		return nil, fmt.Errorf("RATE_LIMIT_CLEANUP must be at least 1 second")
+	}
+	if cfg.ServerPort < 1 || cfg.ServerPort > 65535 {
+		return nil, fmt.Errorf("SERVER_PORT must be between 1 and 65535")
 	}
 
 	// Validate cache configuration
