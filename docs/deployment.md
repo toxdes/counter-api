@@ -62,6 +62,11 @@ To roll back one migration, run `make migrate-down`. Each invocation rolls
 back only the highest applied migration; repeat it deliberately for additional
 rollbacks.
 
+To verify that materialized counter values match their completed operation
+history, run `make reconcile`. The command scans counters in bounded batches,
+reports mismatches and initial-value invariant violations, and exits non-zero
+when inconsistencies are found. It does not modify application data.
+
 ## Building
 
 ### Build for Linux

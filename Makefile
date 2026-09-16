@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration clean migrate-up migrate-down docs version bump bump-minor bump-major help
+.PHONY: build run test test-integration clean migrate-up migrate-down reconcile docs version bump bump-minor bump-major help
 
 VERSION ?= $(shell cat version.txt 2>/dev/null || echo "dev")
 LDFLAGS = -X 'main.Version=$(VERSION)'
@@ -23,6 +23,10 @@ migrate-up:
 migrate-down:
 	@echo "Rolling back database migrations..."
 	./counter --db-migrate=down
+
+reconcile:
+	@echo "Reconciling counters against operation history..."
+	./counter --reconcile
 
 clean:
 	rm -f counter
@@ -72,6 +76,7 @@ help:
 	@echo "  test-integration - Run PostgreSQL-backed tests (requires PostgreSQL)"
 	@echo "  migrate-up   - Apply pending migrations"
 	@echo "  migrate-down - Rollback last migration"
+	@echo "  reconcile    - Verify counter values against operation history"
 	@echo "  docs         - Prepare API documentation (embed in binary)"
 	@echo "  version      - Show application version"
 	@echo "  bump         - Bump patch version (1.0.3 → 1.0.4)"

@@ -9,6 +9,8 @@ import (
 	"counter/internal/migrations"
 	"counter/internal/models"
 	"counter/internal/router"
+	"counter/internal/service"
+	"counter/internal/store"
 	"flag"
 	"fmt"
 	"log"
@@ -30,6 +32,7 @@ func main() {
 	// Define CLI flags
 	versionFlag := flag.Bool("version", false, "Print version information")
 	migrateFlag := flag.String("db-migrate", "", "Run database migrations (up or down)")
+	reconcileFlag := flag.Bool("reconcile", false, "Reconcile counters against completed operation history")
 	flag.Parse()
 
 	// Handle version flag
@@ -87,6 +90,24 @@ func main() {
 		default:
 			log.Fatalf("Invalid migration direction: %s (use 'up' or 'down')", *migrateFlag)
 		}
+	}
+
+	if *reconcileFlag {
+		report, err := service.NewReconciliationService(store.NewCounterStore(db)).Reconcile(context.Background(), 100)
+		if err != nil {
+			log.Fatalf("Reconciliation failed: %v", err)
+		}
+		log.Printf("Reconciliation completed: counters=%d operations=%d mismatches=%d initial_value_violations=%d duration=%s",
+			report.CountersChecked,
+			report.OperationsScanned,
+			report.Mismatches,
+			report.InitialValueViolations,
+			report.CompletedAt.Sub(report.StartedAt),
+		)
+		if report.Mismatches != 0 || report.InitialValueViolations != 0 {
+			log.Fatalf("Reconciliation found inconsistent counter history")
+		}
+		return
 	}
 
 	// Initialize middleware

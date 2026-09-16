@@ -32,6 +32,7 @@ var routeSurface = []string{
 	"POST /tenants/<tenant_id>/counters/<counter_id>/set",
 	"POST /v2/tenants/<tenant_id>/counters/<counter_id>/inc",
 	"POST /v2/tenants/<tenant_id>/counters/<counter_id>/set",
+	"GET /v2/tenants/<tenant_id>/counters/<counter_id>/operations",
 	"OPTIONS /*",
 }
 
@@ -91,8 +92,10 @@ func newRouter(db *database.DB, cachedCounter *cache.CachedCounter, corsConfig *
 	installMiddleware(r, corsConfig, rateLimiter, logger, sentryConfig)
 
 	tenantService := service.NewTenantService(store.NewTenantStore(db))
-	counterService := service.NewCounterService(store.NewCounterStore(db))
-	registerRoutes(r, apiKey, tenantService, counterService, cachedCounter)
+	counterStore := store.NewCounterStore(db)
+	counterService := service.NewCounterService(counterStore)
+	historyService := service.NewOperationHistoryService(counterStore)
+	registerRoutes(r, apiKey, tenantService, counterService, historyService, cachedCounter)
 
 	return &Router{RequestHandler: r.HandleRequest}
 }
@@ -140,7 +143,7 @@ func installMiddleware(r *routing.Router, corsConfig *middleware.CORSConfig, rat
 	})
 }
 
-func registerRoutes(r *routing.Router, apiKey string, tenantService service.TenantService, counterService service.CounterService, cachedCounter *cache.CachedCounter) {
+func registerRoutes(r *routing.Router, apiKey string, tenantService service.TenantService, counterService service.CounterService, historyService service.OperationHistoryService, cachedCounter *cache.CachedCounter) {
 	r.Get("/", toHandler(handlers.DocsHandler))
 
 	r.Post("/tenants", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.CreateTenantServiceHandler(tenantService))))
@@ -162,6 +165,7 @@ func registerRoutes(r *routing.Router, apiKey string, tenantService service.Tena
 	v2SetCounter := handlers.SetCounterServiceHandlerVersioned(counterService, contract.V2)
 	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(v2IncrementCounter))
 	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/set", middleware.APIKeyAuthRouting(apiKey)(toHandler(v2SetCounter)))
+	r.Get("/v2/tenants/<tenant_id>/counters/<counter_id>/operations", middleware.APIKeyAuthRouting(apiKey)(toHandler(handlers.OperationHistoryServiceHandler(historyService))))
 
 	r.Options("/*", func(c *routing.Context) error {
 		c.RequestCtx.SetStatusCode(fasthttp.StatusOK)

@@ -103,6 +103,45 @@ Content-Type: application/json
 
 An exact retry returns the same result with `replayed: true`.
 
+## Operation History
+
+Returns completed operations for a counter in reverse chronological order.
+History is tenant-scoped and requires the API key.
+
+```http
+GET /v2/tenants/{tenant_id}/counters/{counter_id}/operations?limit=50&cursor=...
+X-API-Key: your-api-key
+```
+
+`limit` defaults to `50` and may range from `1` to `100`. The cursor is opaque;
+pass the returned `next_cursor` unchanged to retrieve the next page.
+
+### Response
+
+```json
+{
+  "operations": [
+    {
+      "operation_id": "01912345-6789-7000-8000-000000000003",
+      "counter_id": "01912345-6789-7000-8000-000000000002",
+      "kind": "increment",
+      "delta": 5,
+      "value_before": 42,
+      "value_after": 47,
+      "metadata": {},
+      "created_at": "2026-04-07T12:02:00Z",
+      "completed_at": "2026-04-07T12:02:00Z"
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+The operation-history response excludes request hashes and other internal
+fields. The operator command `--reconcile` verifies that completed operation
+deltas equal each stored counter value and that each counter has exactly one
+`initial_value` operation.
+
 ## Reads and Consistency
 
 V2 reads are strong while served by the PostgreSQL primary. Future stale-capable
