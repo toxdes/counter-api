@@ -5,6 +5,8 @@ import (
 	"counter/internal/database"
 	"counter/internal/handlers"
 	"counter/internal/middleware"
+	"counter/internal/migrations"
+	"counter/internal/observability"
 	"counter/internal/service"
 	"counter/internal/store"
 	"net"
@@ -20,6 +22,9 @@ type Router struct {
 
 var routeSurface = []string{
 	"GET /",
+	"GET /livez",
+	"GET /readyz",
+	"GET /metrics",
 	"POST /tenants",
 	"GET /tenants/<tenant_id>",
 	"GET /tenants/<tenant_id>/counters",
@@ -77,6 +82,30 @@ func NewRouterWithOptions(db *database.DB, corsConfig *middleware.CORSConfig, ra
 // NewRouterWithTimeouts adds explicit request and process concurrency budgets
 // while preserving the older constructor for existing integrations/tests.
 func NewRouterWithTimeouts(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, legacyAPIKeyEnabled bool, logger *middleware.Logger, sentryConfig *middleware.SentryConfig, timeouts middleware.RouteTimeouts, maxConcurrency int) *Router {
+	state := observability.NewHealthState(migrations.LatestVersion)
+	state.MarkStarted(migrations.LatestVersion)
+	return NewRouterWithObservability(db, corsConfig, rateLimiter, apiKey, legacyAPIKeyEnabled, logger, sentryConfig, timeouts, maxConcurrency, OperationalOptions{
+		Health:        state,
+		Metrics:       observability.NewMetrics(),
+		Version:       "dev",
+		SchemaVersion: migrations.LatestVersion,
+	})
+}
+
+type OperationalOptions struct {
+	Health        *observability.HealthState
+	Metrics       *observability.Metrics
+	Version       string
+	SchemaVersion int64
+}
+
+func NewRouterWithObservability(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, legacyAPIKeyEnabled bool, logger *middleware.Logger, sentryConfig *middleware.SentryConfig, timeouts middleware.RouteTimeouts, maxConcurrency int, options OperationalOptions) *Router {
+	if options.Health == nil {
+		options.Health = observability.NewHealthState(migrations.LatestVersion)
+	}
+	if options.Metrics == nil {
+		options.Metrics = observability.NewMetrics()
+	}
 	r := routing.New()
 	tenantService := service.NewTenantService(store.NewTenantStore(db))
 	counterStore := store.NewCounterStore(db)
@@ -84,19 +113,20 @@ func NewRouterWithTimeouts(db *database.DB, corsConfig *middleware.CORSConfig, r
 	historyService := service.NewOperationHistoryService(counterStore)
 	credentialStore := store.NewCredentialStore(db)
 	credentialService := service.NewCredentialService(credentialStore)
-	registerRoutes(r, tenantService, counterService, historyService, credentialService)
+	registerRoutes(r, tenantService, counterService, historyService, credentialService, options.Health, options.Metrics, db, options.Version, options.SchemaVersion)
 
 	handler := fasthttp.RequestHandler(r.HandleRequest)
-	handler = middleware.RateLimit(rateLimiter)(handler)
+	handler = middleware.RateLimitWithMetrics(rateLimiter, options.Metrics)(handler)
 	if !legacyAPIKeyEnabled {
 		apiKey = ""
 	}
 	handler = middleware.AuthenticateRequest(middleware.NewAPIKeyAuthenticator(apiKey, credentialStore))(handler)
 	handler = middleware.CORS(corsConfig)(handler)
-	handler = middleware.ConcurrencyLimit(maxConcurrency)(handler)
+	handler = middleware.ConcurrencyLimitWithMetrics(maxConcurrency, options.Metrics)(handler)
 	handler = middleware.RequestContext(timeouts)(handler)
 	handler = middleware.ClientIdentity(handler)
-	handler = middleware.LoggingWithLogger(logger)(handler)
+	handler = middleware.MetricsContext(options.Metrics)(handler)
+	handler = middleware.LoggingWithLoggerAndMetrics(logger, options.Metrics)(handler)
 	if sentryConfig != nil && sentryConfig.DSN != "" {
 		handler = middleware.NewSentryHandler(handler)
 	}
@@ -105,8 +135,11 @@ func NewRouterWithTimeouts(db *database.DB, corsConfig *middleware.CORSConfig, r
 	return &Router{RequestHandler: handler}
 }
 
-func registerRoutes(r *routing.Router, tenantService service.TenantService, counterService service.CounterService, historyService service.OperationHistoryService, credentialService service.CredentialService) {
+func registerRoutes(r *routing.Router, tenantService service.TenantService, counterService service.CounterService, historyService service.OperationHistoryService, credentialService service.CredentialService, health *observability.HealthState, metrics *observability.Metrics, db *database.DB, version string, schemaVersion int64) {
 	r.Get("/", toHandler(handlers.DocsHandler))
+	r.Get("/livez", toHandler(handlers.LivenessHandler(health)))
+	r.Get("/readyz", toHandler(handlers.ReadinessHandler(health, db)))
+	r.Get("/metrics", middleware.RequireAdminRouting(toHandler(handlers.MetricsHandler(metrics, db, version, schemaVersion))))
 
 	r.Post("/tenants", middleware.RequireAdminRouting(toHandler(handlers.CreateTenantServiceHandler(tenantService))))
 	r.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantServiceHandler(tenantService)))

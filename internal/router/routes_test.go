@@ -5,6 +5,9 @@ import "testing"
 func TestSharedRouteSurfaceIsComplete(t *testing.T) {
 	want := []string{
 		"GET /",
+		"GET /livez",
+		"GET /readyz",
+		"GET /metrics",
 		"POST /tenants",
 		"GET /tenants/<tenant_id>",
 		"GET /tenants/<tenant_id>/counters",

@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration clean migrate-up migrate-down reconcile docs version bump bump-minor bump-major help
+.PHONY: build run test test-integration security sbom build-reproducible clean migrate-up migrate-down reconcile docs version bump bump-minor bump-major help
 
 VERSION ?= $(shell cat version.txt 2>/dev/null || echo "dev")
 LDFLAGS = -X 'main.Version=$(VERSION)'
@@ -15,6 +15,19 @@ test:
 
 test-integration:
 	COUNTER_REQUIRE_POSTGRES=1 go test -v -race ./internal/testutil ./internal/handlers ./internal/router
+
+security:
+	@command -v govulncheck >/dev/null || (echo "govulncheck is required" >&2; exit 1)
+	@command -v gitleaks >/dev/null || (echo "gitleaks is required" >&2; exit 1)
+	govulncheck ./...
+	gitleaks detect --no-banner
+
+sbom:
+	@command -v syft >/dev/null || (echo "syft is required" >&2; exit 1)
+	syft dir:. -o cyclonedx-json=/tmp/counter-sbom.json
+
+build-reproducible: docs
+	CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-buildid= -X 'main.Version=$(VERSION)'" -o counter .
 
 migrate-up:
 	@echo "Running database migrations..."
@@ -74,6 +87,9 @@ help:
 	@echo "  run          - Build and run the application"
 	@echo "  test         - Run tests"
 	@echo "  test-integration - Run PostgreSQL-backed tests (requires PostgreSQL)"
+	@echo "  security     - Run govulncheck and gitleaks"
+	@echo "  sbom         - Generate a CycloneDX SBOM with syft"
+	@echo "  build-reproducible - Build with reproducibility flags"
 	@echo "  migrate-up   - Apply pending migrations"
 	@echo "  migrate-down - Rollback last migration"
 	@echo "  reconcile    - Verify counter values against operation history"

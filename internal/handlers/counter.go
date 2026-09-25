@@ -3,6 +3,7 @@ package handlers
 import (
 	"counter/internal/contract"
 	"counter/internal/database"
+	"counter/internal/middleware"
 	"counter/internal/models"
 	"counter/internal/service"
 	"counter/internal/store"
@@ -153,16 +154,21 @@ func IncrementCounterServiceHandlerVersioned(counterService service.CounterServi
 			return
 		}
 		if errors.Is(err, service.ErrIdempotencyKeyReused) {
+			middleware.RecordEvent(ctx, "idempotency_conflict")
 			respondWithError(ctx, fasthttp.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "Idempotency key was reused with different request data")
 			return
 		}
 		if errors.Is(err, service.ErrOperationInProgress) {
+			middleware.RecordEvent(ctx, "idempotency_conflict")
 			respondWithError(ctx, fasthttp.StatusConflict, "OPERATION_IN_PROGRESS", "The operation is already in progress")
 			return
 		}
 		if err != nil {
 			respondWithServiceError(ctx, err, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Counter service is temporarily unavailable")
 			return
+		}
+		if result.Replayed {
+			middleware.RecordEvent(ctx, "idempotency_replay")
 		}
 
 		resp := &models.IncrementResponse{
@@ -264,16 +270,21 @@ func SetCounterServiceHandlerVersioned(counterService service.CounterService, ve
 			return
 		}
 		if errors.Is(err, service.ErrIdempotencyKeyReused) {
+			middleware.RecordEvent(ctx, "idempotency_conflict")
 			respondWithError(ctx, fasthttp.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "Idempotency key was reused with different request data")
 			return
 		}
 		if errors.Is(err, service.ErrOperationInProgress) {
+			middleware.RecordEvent(ctx, "idempotency_conflict")
 			respondWithError(ctx, fasthttp.StatusConflict, "OPERATION_IN_PROGRESS", "The operation is already in progress")
 			return
 		}
 		if err != nil {
 			respondWithServiceError(ctx, err, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Counter service is temporarily unavailable")
 			return
+		}
+		if result.Replayed {
+			middleware.RecordEvent(ctx, "idempotency_replay")
 		}
 
 		resp := &models.SetValueResponse{

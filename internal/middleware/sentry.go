@@ -65,6 +65,7 @@ func NewSentryHandler(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 
 	// Return the wrapped handler
 	return sentryHandler.Handle(func(ctx *fasthttp.RequestCtx) {
+		ensureRequestID(ctx)
 		// Get the Sentry hub from context (created by sentryfasthttp.Handle)
 		hub := sentryfasthttp.GetHubFromContext(ctx)
 		if hub == nil {

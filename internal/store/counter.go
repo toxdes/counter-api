@@ -4,8 +4,10 @@ import (
 	"context"
 	"counter/internal/database"
 	"counter/internal/models"
+	"counter/internal/requestctx"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -163,12 +165,12 @@ func (s *CounterStore) incrementCounter(ctx context.Context, tenantID, counterID
 	var insertedID string
 	err = tx.QueryRowxContext(ctx, `
 		INSERT INTO counter_operations (
-			tenant_id, counter_id, operation_id, kind, delta, request_hash, actor_id, state, created_at
+			tenant_id, counter_id, operation_id, kind, delta, request_hash, actor_id, metadata, state, created_at
 		)
-		VALUES ($1, $2, $3, 'increment', $4, $5, $6, 'pending', $7)
+		VALUES ($1, $2, $3, 'increment', $4, $5, $6, $7, 'pending', $8)
 		ON CONFLICT (tenant_id, operation_id) DO NOTHING
 		RETURNING operation_id
-	`, tenantID, counterID, operationID, delta, requestHash, actorID, now).Scan(&insertedID)
+	`, tenantID, counterID, operationID, delta, requestHash, actorID, requestMetadata(ctx), now).Scan(&insertedID)
 	if errors.Is(err, sql.ErrNoRows) {
 		result, resolveErr := resolveExistingOperation(ctx, tx, tenantID, operationID, counterID, "increment", &delta, requestHash)
 		if resolveErr != nil {
@@ -276,12 +278,12 @@ func (s *CounterStore) setCounterValueWithOperation(ctx context.Context, tenantI
 	var insertedID string
 	err = tx.QueryRowxContext(ctx, `
 		INSERT INTO counter_operations (
-			tenant_id, counter_id, operation_id, kind, delta, request_hash, actor_id, state, created_at
+			tenant_id, counter_id, operation_id, kind, delta, request_hash, actor_id, metadata, state, created_at
 		)
-		VALUES ($1, $2, $3, 'set_adjustment', $4, $5, $6, 'pending', $7)
+		VALUES ($1, $2, $3, 'set_adjustment', $4, $5, $6, $7, 'pending', $8)
 		ON CONFLICT (tenant_id, operation_id) DO NOTHING
 		RETURNING operation_id
-	`, tenantID, counterID, operationID, delta, requestHash, actorID, now).Scan(&insertedID)
+	`, tenantID, counterID, operationID, delta, requestHash, actorID, requestMetadata(ctx), now).Scan(&insertedID)
 	if errors.Is(err, sql.ErrNoRows) {
 		result, resolveErr := resolveExistingOperation(ctx, tx, tenantID, operationID, counterID, "set_adjustment", nil, requestHash)
 		if resolveErr != nil {
@@ -327,6 +329,18 @@ func (s *CounterStore) setCounterValueWithOperation(ctx context.Context, tenantI
 	}
 	committed = true
 	return MutationResult{OperationID: insertedID, Delta: delta, Value: value, UpdatedAt: now}, nil
+}
+
+func requestMetadata(ctx context.Context) []byte {
+	requestID := requestctx.RequestID(ctx)
+	if requestID == "" {
+		return []byte(`{}`)
+	}
+	metadata, err := json.Marshal(map[string]string{"request_id": requestID})
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return metadata
 }
 
 func resolveExistingOperation(ctx context.Context, tx *sqlx.Tx, tenantID, operationID, counterID, kind string, expectedDelta *int64, requestHash []byte) (MutationResult, error) {

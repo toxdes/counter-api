@@ -122,6 +122,75 @@ history, run `make reconcile`. The command scans counters in bounded batches,
 reports mismatches and initial-value invariant violations, and exits non-zero
 when inconsistencies are found. It does not modify application data.
 
+### 4. Health and graceful deployment
+
+The process verifies that the database is at the binary's supported migration
+version before serving traffic. Configure the load balancer or nginx health
+check against `/readyz`; use `/livez` only for process supervision. During a
+shutdown the process marks itself unready first, stops accepting new listener
+connections, drains bounded in-flight requests, and then closes PostgreSQL.
+
+For a rolling deployment, remove the instance from `/readyz` traffic, send
+SIGTERM, wait for the process to exit, and then replace it. Do not use sticky
+sessions for correctness.
+
+### 5. Backups and restore verification
+
+Use managed PostgreSQL point-in-time recovery where available, with a recovery
+point objective appropriate to the product. For self-managed PostgreSQL,
+retain base backups and WAL archives with `pgBackRest` or an equivalent tool.
+Take an encrypted custom-format backup for a portable smoke test:
+
+```bash
+pg_dump --format=custom --file=counter-api.dump "$DATABASE_URL"
+```
+
+Run the isolated restore check regularly from a backup host. It creates a
+fresh database, restores the dump, runs reconciliation, and drops only that
+fresh database:
+
+```bash
+RESTORE_TEST_DB=counter_api_restore_20260917 \
+RESTORE_DATABASE_URL=postgres://counter_user:password@localhost/counter_api_restore_20260917 \
+COUNTER_BIN=./counter \
+./scripts/postgres_restore_smoke.py counter-api.dump
+```
+
+The restore is not considered successful unless reconciliation reports zero
+mismatches and zero initial-value violations. Test both backup freshness and
+restore completion alerts.
+
+### 6. Release and supply-chain checks
+
+Use a current patched Go toolchain for releases. The repository provides
+optional checks for vulnerability scanning, secret scanning, SBOM generation,
+and reproducible build flags:
+
+```bash
+make security
+make sbom
+make build-reproducible VERSION=1.0.0
+```
+
+The `security` target expects `govulncheck` and `gitleaks`; `sbom` expects
+`syft`. Run them in CI and retain the SBOM and build metadata with the release
+artifact. Do not commit generated SBOMs or secret-scan reports.
+
+### 7. Initial SLOs
+
+Use these as starting targets and revise them from production measurements:
+
+| Signal | Initial target |
+| --- | --- |
+| Durable mutation availability | 99.9% monthly for committed V2 mutations |
+| Mutation latency | p95 below 250 ms, p99 below 1 s |
+| Reconciliation mismatch rate | 0 mismatches; alert on any mismatch |
+| RPO | 5 minutes or better with WAL/PITR |
+| RTO | 30 minutes or better for a regional database failure |
+
+Track the targets separately from public V1 availability because V1 clients
+may omit idempotency keys and cannot provide the same retry guarantees.
+
 ## Building
 
 ### Build for Linux
@@ -268,8 +337,14 @@ Logs are output in JSON format. Send to:
 ### Health Checks
 
 ```bash
-# Check if server is responding
-curl -f http://localhost:8080/tenants/nonexistent || echo "Server down"
+# Process health; does not require PostgreSQL
+curl -f http://localhost:8080/livez
+
+# Traffic readiness; requires compatible schema and PostgreSQL
+curl -f http://localhost:8080/readyz
+
+# Administrator-protected Prometheus metrics
+curl -H "X-API-Key: $API_KEY" http://localhost:8080/metrics
 
 # Check database connectivity
 psql -h localhost -U counter_user -d counter_api -c "SELECT 1"

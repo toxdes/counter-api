@@ -1,13 +1,13 @@
 package middleware
 
 import (
+	"counter/internal/observability"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 )
 
@@ -65,6 +65,10 @@ func Logging(writer io.Writer) func(fasthttp.RequestHandler) fasthttp.RequestHan
 // LoggingWithLogger wraps the actual downstream handler with the supplied
 // structured logger so status and duration describe route execution.
 func LoggingWithLogger(logger *Logger) func(fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return LoggingWithLoggerAndMetrics(logger, nil)
+}
+
+func LoggingWithLoggerAndMetrics(logger *Logger, metrics *observability.Metrics) func(fasthttp.RequestHandler) fasthttp.RequestHandler {
 	if logger == nil {
 		logger = NewLogger(nil, "info")
 	}
@@ -72,10 +76,7 @@ func LoggingWithLogger(logger *Logger) func(fasthttp.RequestHandler) fasthttp.Re
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
 			start := time.Now()
-			requestID := uuid.New().String()
-
-			// Set request ID in response header
-			ctx.Response.Header.Set("X-Request-ID", requestID)
+			requestID := ensureRequestID(ctx)
 
 			// Call next handler
 			next(ctx)
@@ -92,6 +93,9 @@ func LoggingWithLogger(logger *Logger) func(fasthttp.RequestHandler) fasthttp.Re
 				Path:      RouteTemplate(string(ctx.Path())),
 				Status:    ctx.Response.StatusCode(),
 				Duration:  duration,
+			}
+			if metrics != nil {
+				metrics.RecordRequest(entry.Method, entry.Path, entry.Status, time.Since(start))
 			}
 
 			// Log errors

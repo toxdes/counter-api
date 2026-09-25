@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"counter/internal/observability"
 	"net"
 	"strconv"
 	"sync"
@@ -239,6 +240,10 @@ func (tb *tokenBucket) AllowRequest(isGet bool) bool {
 
 // RateLimit returns a rate limiting middleware handler
 func RateLimit(rl *RateLimiter) func(fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return RateLimitWithMetrics(rl, nil)
+}
+
+func RateLimitWithMetrics(rl *RateLimiter, metrics *observability.Metrics) func(fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
 			// Check if this is a GET request (read operation)
@@ -262,6 +267,9 @@ func RateLimit(rl *RateLimiter) func(fasthttp.RequestHandler) fasthttp.RequestHa
 			ctx.Response.Header.Set("X-RateLimit-Limit", strconv.Itoa(maxReq))
 
 			if !allowed {
+				if metrics != nil {
+					metrics.RecordEvent("rate_limit_rejected")
+				}
 				ctx.Response.Header.Set("Retry-After", strconv.Itoa(retryAfter))
 				ctx.Response.Header.SetContentType("application/json")
 				ctx.SetStatusCode(fasthttp.StatusTooManyRequests)

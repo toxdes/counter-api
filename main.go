@@ -6,12 +6,14 @@ import (
 	"counter/internal/database"
 	"counter/internal/middleware"
 	"counter/internal/migrations"
+	"counter/internal/observability"
 	"counter/internal/router"
 	"counter/internal/service"
 	"counter/internal/store"
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -112,6 +114,13 @@ func main() {
 		return
 	}
 
+	schemaVersion, err := migrations.VerifySchemaCompatibility(context.Background(), db)
+	if err != nil {
+		log.Fatalf("Database schema is not compatible: %v", err)
+	}
+	health := observability.NewHealthState(migrations.LatestVersion)
+	metrics := observability.NewMetrics()
+
 	// Initialize middleware
 	corsConfig := &middleware.CORSConfig{
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
@@ -177,7 +186,7 @@ func main() {
 	}()
 
 	// Create router
-	r := router.NewRouterWithTimeouts(
+	r := router.NewRouterWithObservability(
 		db,
 		corsConfig,
 		rateLimiter,
@@ -191,6 +200,12 @@ func main() {
 			Database: time.Duration(cfg.DBTimeoutMS) * time.Millisecond,
 		},
 		cfg.ServerConcurrency,
+		router.OperationalOptions{
+			Health:        health,
+			Metrics:       metrics,
+			Version:       Version,
+			SchemaVersion: schemaVersion,
+		},
 	)
 
 	// Helper function to find last index of a byte in a string
@@ -207,28 +222,40 @@ func main() {
 		MaxRequestBodySize: cfg.MaxRequestBodyBytes,
 	}
 
-	// Start server in goroutine
+	addr := fmt.Sprintf("%s:%d", cfg.ServerHost, cfg.ServerPort)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		close(stopCleanup)
+		log.Fatalf("Failed to bind server on %s: %v", addr, err)
+	}
+	health.MarkStarted(schemaVersion)
+	log.Printf("Starting server on %s", addr)
+	serverErrors := make(chan error, 1)
 	go func() {
-		addr := fmt.Sprintf("%s:%d", cfg.ServerHost, cfg.ServerPort)
-		log.Printf("Starting server on %s", addr)
-		if err := server.ListenAndServe(addr); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
-		}
+		serverErrors <- server.Serve(listener)
 	}()
 
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	<-sigChan
-
-	log.Println("Shutting down server...")
-
-	// Stop cleanup goroutine
-	close(stopCleanup)
-
-	if err := server.Shutdown(); err != nil {
-		log.Printf("Error during server shutdown: %v", err)
+	select {
+	case sig := <-sigChan:
+		log.Printf("Shutting down server after %s...", sig)
+		health.MarkDraining()
+		close(stopCleanup)
+		if err := server.Shutdown(); err != nil {
+			log.Printf("Error during server shutdown: %v", err)
+		}
+		if err := <-serverErrors; err != nil {
+			log.Printf("Server stopped with error: %v", err)
+		}
+		health.MarkStopped()
+		log.Println("Server stopped")
+	case err := <-serverErrors:
+		close(stopCleanup)
+		health.MarkStopped()
+		if err != nil {
+			log.Printf("Server stopped unexpectedly: %v", err)
+		}
 	}
-
-	log.Println("Server stopped")
 }

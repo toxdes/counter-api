@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"counter/internal/requestctx"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -63,6 +64,7 @@ func RequestContext(timeouts RouteTimeouts) func(fasthttp.RequestHandler) fastht
 			}
 
 			requestContext, requestCancel := context.WithTimeout(context.Background(), timeout)
+			requestContext = requestctx.WithRequestID(requestContext, RequestIDFromRequest(ctx))
 			databaseContext, databaseCancel := DatabaseContext(requestContext, timeouts.Database)
 			ctx.SetUserValue(requestContextKey{}, requestContextState{
 				request:  requestContext,

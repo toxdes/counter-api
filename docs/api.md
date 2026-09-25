@@ -32,8 +32,23 @@ See [the V2 API reference](api-v2.md).
 ### Making Requests
 
 All requests should use `Content-Type: application/json` for request bodies.
+The server returns an `X-Request-ID` response header. If a caller supplies a
+bounded `X-Request-ID`, it is propagated; otherwise the server generates one.
 
 ## Endpoints
+
+### Operations and Health
+
+`GET /livez` checks only whether the process is alive and does not require
+PostgreSQL. `GET /readyz` returns `200` only after startup has completed, the
+database schema matches the binary, the process is not draining, and a
+bounded PostgreSQL ping succeeds. Load balancers should use `/readyz` for
+traffic eligibility and `/livez` for process supervision.
+
+`GET /metrics` is administrator-protected and returns Prometheus text
+including route/status request counts and durations, database pool usage and
+waits, overload/rate-limit/idempotency events, build version, and schema
+version. It must not be exposed directly to the public internet.
 
 ### Admin Endpoints
 

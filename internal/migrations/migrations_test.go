@@ -56,3 +56,15 @@ func TestValidateMigrationPathsRejectsDuplicateVersions(t *testing.T) {
 		t.Fatalf("expected duplicate-version error, got %v", err)
 	}
 }
+
+func TestValidateSchemaVersionRequiresExactCompatibility(t *testing.T) {
+	if err := ValidateSchemaVersion(LatestVersion, LatestVersion); err != nil {
+		t.Fatalf("latest schema should be compatible: %v", err)
+	}
+	if err := ValidateSchemaVersion(LatestVersion-1, LatestVersion); err == nil {
+		t.Fatal("older schema should not be served without migration")
+	}
+	if err := ValidateSchemaVersion(LatestVersion+1, LatestVersion); err == nil {
+		t.Fatal("newer schema should not be served by an older binary")
+	}
+}

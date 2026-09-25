@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"counter/internal/middleware"
+	"counter/internal/requestctx"
 	"database/sql"
 	"errors"
 
@@ -42,11 +43,13 @@ func MultiErrorResponse(errors []ErrorDetail) *ErrorResponse {
 // the middleware layer.
 func requestDatabaseContext(ctx *fasthttp.RequestCtx) context.Context {
 	requestContext, _ := middleware.DatabaseContextFromRequest(ctx)
-	return requestContext
+	return requestctx.WithRequestID(requestContext, middleware.RequestIDFromRequest(ctx))
 }
 
 func respondWithServiceError(ctx *fasthttp.RequestCtx, err error, fallbackStatus int, fallbackCode, fallbackMessage string) {
+	middleware.RecordEvent(ctx, "service_error")
 	if isUnavailable(err) {
+		middleware.RecordEvent(ctx, "transaction_error")
 		ctx.Response.Header.Set("Retry-After", "1")
 		respondWithError(ctx, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Service is temporarily unavailable")
 		return

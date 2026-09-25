@@ -36,6 +36,12 @@ func TestRouteTemplateBoundsUUIDCardinality(t *testing.T) {
 	}
 }
 
+func TestRouteTemplateBoundsUnknownPathCardinality(t *testing.T) {
+	if got := RouteTemplate("/unmatched/user-controlled-value"); got != "/:param/:param" {
+		t.Fatalf("RouteTemplate() = %q", got)
+	}
+}
+
 func TestRedactSensitiveStackRemovesRequestSecrets(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Request.Header.Set("X-API-Key", "secret-key")

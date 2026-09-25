@@ -37,10 +37,22 @@ func redactSensitiveStack(ctx *fasthttp.RequestCtx, stack string) string {
 // RouteTemplate bounds telemetry cardinality by replacing UUID path segments
 // with a stable parameter marker.
 func RouteTemplate(path string) string {
+	staticSegments := map[string]struct{}{
+		"v2": {}, "tenants": {}, "counters": {}, "inc": {}, "set": {},
+		"operations": {}, "credentials": {}, "rotate": {}, "revoke": {},
+		"admin": {}, "livez": {}, "readyz": {}, "metrics": {},
+	}
 	parts := strings.Split(path, "/")
 	for index, part := range parts {
+		if part == "" {
+			continue
+		}
 		if _, err := uuid.Parse(part); err == nil {
 			parts[index] = ":id"
+			continue
+		}
+		if _, ok := staticSegments[part]; !ok {
+			parts[index] = ":param"
 		}
 	}
 	return strings.Join(parts, "/")

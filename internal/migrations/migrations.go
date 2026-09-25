@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"counter/internal/database"
+	"database/sql"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -22,12 +23,46 @@ var migrationFiles embed.FS
 
 var migrationFilenamePattern = regexp.MustCompile(`^([0-9]+)_[A-Za-z0-9][A-Za-z0-9_-]*\.(up|down)\.sql$`)
 
+const LatestVersion int64 = 7
+
 type migrationFile struct {
 	version  int64
 	up       string
 	down     string
 	upPath   string
 	downPath string
+}
+
+// CurrentVersion reads the highest migration recorded by the canonical
+// migration runner. A missing schema_migrations table is a startup failure,
+// not an empty database that the API should serve accidentally.
+func CurrentVersion(ctx context.Context, db *database.DB) (int64, error) {
+	var version sql.NullInt64
+	if err := db.GetContext(ctx, &version, "SELECT MAX(version) FROM schema_migrations"); err != nil {
+		return 0, fmt.Errorf("read schema version: %w", err)
+	}
+	if !version.Valid {
+		return 0, nil
+	}
+	return version.Int64, nil
+}
+
+func ValidateSchemaVersion(current, supported int64) error {
+	if current != supported {
+		return fmt.Errorf("schema version %d is incompatible with supported version %d", current, supported)
+	}
+	return nil
+}
+
+func VerifySchemaCompatibility(ctx context.Context, db *database.DB) (int64, error) {
+	current, err := CurrentVersion(ctx, db)
+	if err != nil {
+		return 0, err
+	}
+	if err := ValidateSchemaVersion(current, LatestVersion); err != nil {
+		return current, err
+	}
+	return current, nil
 }
 
 // RunUp executes all pending migrations while holding a database-wide
