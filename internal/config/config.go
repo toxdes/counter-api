@@ -15,6 +15,7 @@ type Config struct {
 
 	// Database
 	DatabaseURL                string
+	MigrationDatabaseURL       string
 	DBMaxOpenConns             int
 	DBMaxIdleConns             int
 	DBMaxIdleTime              int
@@ -79,6 +80,7 @@ func Load() (*Config, error) {
 		ServerPort: getEnvInt("SERVER_PORT", 8080),
 
 		DatabaseURL:                getEnv("DATABASE_URL", ""),
+		MigrationDatabaseURL:       getEnv("MIGRATION_DATABASE_URL", ""),
 		DBMaxOpenConns:             getEnvInt("DB_MAX_OPEN_CONNS", 25),
 		DBMaxIdleConns:             getEnvInt("DB_MAX_IDLE_CONNS", 5),
 		DBMaxIdleTime:              getEnvInt("DB_MAX_IDLE_TIME_SECONDS", 300),

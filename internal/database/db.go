@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 	"time"
@@ -36,6 +37,9 @@ func NewDB(cfg *DBConfig) (*DB, error) {
 	}
 	if cfg.MaxIdleConns < 0 || cfg.MaxIdleConns > cfg.MaxOpenConns {
 		return nil, fmt.Errorf("max idle connections must be between 0 and max open connections")
+	}
+	if IsNeonPoolerURL(cfg.DatabaseURL) && (cfg.StatementTimeout > 0 || cfg.LockTimeout > 0 || cfg.IdleTransactionTimeout > 0) {
+		log.Printf("Neon pooled endpoint detected; skipping PostgreSQL timeout startup options because its pooler rejects them")
 	}
 
 	databaseURL, err := withPostgresTimeouts(cfg.DatabaseURL, cfg.StatementTimeout, cfg.LockTimeout, cfg.IdleTransactionTimeout)
@@ -80,6 +84,9 @@ func (db *DB) PoolMetrics() PoolMetrics {
 }
 
 func withPostgresTimeouts(databaseURL string, statementTimeout, lockTimeout, idleTransactionTimeout time.Duration) (string, error) {
+	if IsNeonPoolerURL(databaseURL) {
+		return databaseURL, nil
+	}
 	options := make([]string, 0, 3)
 	if statementTimeout > 0 {
 		options = append(options, fmt.Sprintf("-c statement_timeout=%dms", statementTimeout.Milliseconds()))
@@ -111,6 +118,18 @@ func withPostgresTimeouts(databaseURL string, statementTimeout, lockTimeout, idl
 	query.Set("options", strings.Join(options, " "))
 	parsed.RawQuery = query.Encode()
 	return parsed.String(), nil
+}
+
+// IsNeonPoolerURL reports whether a PostgreSQL URL targets Neon's PgBouncer
+// transaction pooler. That pooler rejects application-provided timeout startup
+// options and does not retain session state between transactions.
+func IsNeonPoolerURL(databaseURL string) bool {
+	parsed, err := url.Parse(databaseURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return strings.HasSuffix(host, ".neon.tech") && strings.Contains(host, "-pooler.")
 }
 
 // Ping checks if the database connection is alive
