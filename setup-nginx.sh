@@ -87,6 +87,11 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/home/bets/pro/real/counter
 
+# Resource bounds: keep a small VPS from accepting unbounded work.
+MemoryMax=384M
+TasksMax=128
+LimitNOFILE=4096
+
 # Environment
 Environment="DATABASE_URL=$DATABASE_URL"
 EnvironmentFile=/home/bets/pro/real/counter/.env

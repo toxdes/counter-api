@@ -3,11 +3,10 @@ package handlers
 import (
 	"counter/internal/database"
 	"counter/internal/models"
+	"counter/internal/testutil"
 	"encoding/json"
-	"os"
 	"testing"
 
-	"github.com/joho/godotenv"
 	"github.com/valyala/fasthttp"
 )
 
@@ -94,50 +93,11 @@ func TestGetTenantNotFound(t *testing.T) {
 
 // Helper functions
 func setupTestDB(t *testing.T) *database.DB {
-	_ = godotenv.Load()
-
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/counter_api_test?sslmode=disable"
-	}
-
-	cfg := &database.DBConfig{
-		DatabaseURL: dbURL,
-	}
-
-	db, err := database.NewDB(cfg)
-	if err != nil {
-		t.Skipf("Skipping test: database not available: %v", err)
-	}
-
-	// Run migrations
-	db.Exec(`
-		CREATE TABLE IF NOT EXISTS tenants (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			label TEXT NOT NULL UNIQUE,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)
-	`)
-
-	db.Exec(`
-		CREATE TABLE IF NOT EXISTS counters (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-			label TEXT NOT NULL,
-			value BIGINT NOT NULL DEFAULT 0,
-			max_delta BIGINT NOT NULL DEFAULT 50,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)
-	`)
-
-	return db
+	return testutil.OpenPostgres(t)
 }
 
 func cleanupTestDB(t *testing.T, db *database.DB) {
-	db.Exec("DROP TABLE IF EXISTS counters")
-	db.Exec("DROP TABLE IF EXISTS tenants")
+	// The shared fixture owns an isolated schema and cleans it up through t.Cleanup.
 }
 
 func createTestTenant(t *testing.T, db *database.DB, label string) string {

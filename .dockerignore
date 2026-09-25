@@ -1,0 +1,11 @@
+.git
+.worktrees
+.env
+.env.*
+.secrets
+secrets/
+*.pem
+*.key
+*.md
+counter
+*.log

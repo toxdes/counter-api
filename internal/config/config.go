@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 )
@@ -13,18 +14,41 @@ type Config struct {
 	ServerPort int
 
 	// Database
-	DatabaseURL    string
-	DBMaxOpenConns int
-	DBMaxIdleConns int
+	DatabaseURL                string
+	DBMaxOpenConns             int
+	DBMaxIdleConns             int
+	DBMaxIdleTime              int
+	DBTimeoutMS                int
+	DBStatementTimeoutMS       int
+	DBLockTimeoutMS            int
+	DBIdleTransactionTimeoutMS int
+
+	// Request and server protection
+	RequestReadTimeoutSeconds     int
+	RequestMutationTimeoutSeconds int
+	ServerReadTimeoutSeconds      int
+	ServerWriteTimeoutSeconds     int
+	ServerIdleTimeoutSeconds      int
+	ServerConcurrency             int
+	ServerMaxConnsPerIP           int
+	MaxRequestBodyBytes           int
 
 	// Security
-	APIKey string
+	APIKey              string
+	LegacyAPIKeyEnabled bool
 
 	// Rate Limiting
 	RateLimitRequests      int
 	RateLimitGetMultiplier int
 	RateLimitWindow        int
 	RateLimitCleanup       int
+	RateLimitRedisURL      string
+
+	// Counter read cache. Redis is selected when a URL is configured; otherwise
+	// the API uses a bounded per-process in-memory cache.
+	CounterReadCacheRedisURL   string
+	CounterReadCacheMaxEntries int
+	CounterReadCacheTTLSeconds int
 
 	// CORS
 	CORSAllowedOrigins   string
@@ -36,14 +60,6 @@ type Config struct {
 	// Logging
 	LogLevel string
 
-	// Cache
-	CacheEnabled      bool
-	CacheSize         int
-	CacheTTLSeconds   int
-	CacheWorkers      int
-	CacheQueueSize    int
-	CacheShutdownWait int
-
 	// Sentry
 	SentryDSN         string
 	SentryEnvironment string
@@ -53,35 +69,55 @@ type Config struct {
 
 // Load loads configuration from environment variables with sensible defaults
 func Load() (*Config, error) {
+	warnLegacyCacheSettings()
+
 	cfg := &Config{
-		ServerHost: getEnv("SERVER_HOST", "0.0.0.0"),
+		// Bind locally by default. Deployments that intentionally expose the
+		// process directly (for example, a local development container) can
+		// explicitly set SERVER_HOST=0.0.0.0.
+		ServerHost: getEnv("SERVER_HOST", "127.0.0.1"),
 		ServerPort: getEnvInt("SERVER_PORT", 8080),
 
-		DatabaseURL:    getEnv("DATABASE_URL", ""),
-		DBMaxOpenConns: getEnvInt("DB_MAX_OPEN_CONNS", 25),
-		DBMaxIdleConns: getEnvInt("DB_MAX_IDLE_CONNS", 5),
+		DatabaseURL:                getEnv("DATABASE_URL", ""),
+		DBMaxOpenConns:             getEnvInt("DB_MAX_OPEN_CONNS", 25),
+		DBMaxIdleConns:             getEnvInt("DB_MAX_IDLE_CONNS", 5),
+		DBMaxIdleTime:              getEnvInt("DB_MAX_IDLE_TIME_SECONDS", 300),
+		DBTimeoutMS:                getEnvInt("DB_TIMEOUT_MS", 2000),
+		DBStatementTimeoutMS:       getEnvInt("DB_STATEMENT_TIMEOUT_MS", 2000),
+		DBLockTimeoutMS:            getEnvInt("DB_LOCK_TIMEOUT_MS", 500),
+		DBIdleTransactionTimeoutMS: getEnvInt("DB_IDLE_TRANSACTION_TIMEOUT_MS", 10000),
+
+		RequestReadTimeoutSeconds:     getEnvInt("REQUEST_READ_TIMEOUT_SECONDS", 5),
+		RequestMutationTimeoutSeconds: getEnvInt("REQUEST_MUTATION_TIMEOUT_SECONDS", 10),
+		ServerReadTimeoutSeconds:      getEnvInt("SERVER_READ_TIMEOUT_SECONDS", 10),
+		ServerWriteTimeoutSeconds:     getEnvInt("SERVER_WRITE_TIMEOUT_SECONDS", 10),
+		ServerIdleTimeoutSeconds:      getEnvInt("SERVER_IDLE_TIMEOUT_SECONDS", 30),
+		ServerConcurrency:             getEnvInt("SERVER_CONCURRENCY", 128),
+		ServerMaxConnsPerIP:           getEnvInt("SERVER_MAX_CONNS_PER_IP", 100),
+		MaxRequestBodyBytes:           getEnvInt("MAX_REQUEST_BODY_BYTES", 64*1024),
 
 		APIKey: getEnv("API_KEY", ""),
+		// Keep the environment key enabled by default for V1 compatibility.
+		// Operators can disable it after migrating to managed credentials.
+		LegacyAPIKeyEnabled: getEnvBool("LEGACY_API_KEY_ENABLED", true),
 
 		RateLimitRequests:      getEnvInt("RATE_LIMIT_REQUESTS", 10),
 		RateLimitGetMultiplier: getEnvInt("RATE_LIMIT_GET_MULTIPLIER", 3),
 		RateLimitWindow:        getEnvInt("RATE_LIMIT_WINDOW", 60),
 		RateLimitCleanup:       getEnvInt("RATE_LIMIT_CLEANUP", 300),
+		RateLimitRedisURL:      getEnv("RATE_LIMIT_REDIS_URL", ""),
+
+		CounterReadCacheRedisURL:   getEnv("COUNTER_READ_CACHE_REDIS_URL", ""),
+		CounterReadCacheMaxEntries: getEnvInt("COUNTER_READ_CACHE_MAX_ENTRIES", 1000),
+		CounterReadCacheTTLSeconds: getEnvInt("COUNTER_READ_CACHE_TTL_SECONDS", 300),
 
 		CORSAllowedOrigins:   getEnv("CORS_ALLOWED_ORIGINS", "*"),
 		CORSAllowedMethods:   getEnv("CORS_ALLOWED_METHODS", "GET,POST,OPTIONS"),
-		CORSAllowedHeaders:   getEnv("CORS_ALLOWED_HEADERS", "Content-Type,Authorization,X-Request-ID"),
+		CORSAllowedHeaders:   getEnv("CORS_ALLOWED_HEADERS", "Content-Type,Authorization,X-Request-ID,X-API-Key,Idempotency-Key"),
 		CORSAllowCredentials: getEnvBool("CORS_ALLOW_CREDENTIALS", false),
 		CORSMaxAge:           getEnvInt("CORS_MAX_AGE", 3600),
 
 		LogLevel: getEnv("LOG_LEVEL", "info"),
-
-		CacheEnabled:      getEnvBool("CACHE_ENABLED", true),
-		CacheSize:         getEnvInt("CACHE_SIZE", 1000),
-		CacheTTLSeconds:   getEnvInt("CACHE_TTL_SECONDS", 300),
-		CacheWorkers:      getEnvInt("CACHE_WORKERS", 2),
-		CacheQueueSize:    getEnvInt("CACHE_QUEUE_SIZE", 10000),
-		CacheShutdownWait: getEnvInt("CACHE_SHUTDOWN_WAIT", 5),
 
 		SentryDSN:         getEnv("SENTRY_DSN", ""),
 		SentryEnvironment: getEnv("SENTRY_ENVIRONMENT", "development"),
@@ -96,24 +132,50 @@ func Load() (*Config, error) {
 	if cfg.APIKey == "" {
 		return nil, fmt.Errorf("missing required API_KEY")
 	}
+	if cfg.DBMaxOpenConns < 1 {
+		return nil, fmt.Errorf("DB_MAX_OPEN_CONNS must be at least 1")
+	}
+	if cfg.DBMaxIdleConns < 0 || cfg.DBMaxIdleConns > cfg.DBMaxOpenConns {
+		return nil, fmt.Errorf("DB_MAX_IDLE_CONNS must be between 0 and DB_MAX_OPEN_CONNS")
+	}
+	if cfg.DBMaxIdleTime < 1 {
+		return nil, fmt.Errorf("DB_MAX_IDLE_TIME_SECONDS must be at least 1")
+	}
+	if cfg.DBTimeoutMS < 1 || cfg.DBStatementTimeoutMS < 1 || cfg.DBLockTimeoutMS < 1 || cfg.DBIdleTransactionTimeoutMS < 1 {
+		return nil, fmt.Errorf("database timeout settings must be positive")
+	}
+	if cfg.RequestReadTimeoutSeconds < 1 || cfg.RequestMutationTimeoutSeconds < 1 {
+		return nil, fmt.Errorf("request timeout settings must be positive")
+	}
+	if cfg.ServerReadTimeoutSeconds < 1 || cfg.ServerWriteTimeoutSeconds < 1 || cfg.ServerIdleTimeoutSeconds < 1 {
+		return nil, fmt.Errorf("server timeout settings must be positive")
+	}
+	if cfg.ServerConcurrency < 1 || cfg.ServerMaxConnsPerIP < 1 {
+		return nil, fmt.Errorf("server concurrency settings must be positive")
+	}
+	if cfg.MaxRequestBodyBytes < 1 {
+		return nil, fmt.Errorf("MAX_REQUEST_BODY_BYTES must be positive")
+	}
 	if cfg.RateLimitGetMultiplier < 1 {
 		return nil, fmt.Errorf("RATE_LIMIT_GET_MULTIPLIER must be at least 1")
 	}
-
-	// Validate cache configuration
-	if cfg.CacheEnabled {
-		if cfg.CacheSize < 1 {
-			return nil, fmt.Errorf("CACHE_SIZE must be at least 1")
-		}
-		if cfg.CacheTTLSeconds < 0 {
-			return nil, fmt.Errorf("CACHE_TTL_SECONDS cannot be negative")
-		}
-		if cfg.CacheWorkers < 1 {
-			return nil, fmt.Errorf("CACHE_WORKERS must be at least 1")
-		}
-		if cfg.CacheQueueSize < 1 {
-			return nil, fmt.Errorf("CACHE_QUEUE_SIZE must be at least 1")
-		}
+	if cfg.RateLimitRequests < 1 {
+		return nil, fmt.Errorf("RATE_LIMIT_REQUESTS must be at least 1")
+	}
+	if cfg.RateLimitWindow < 1 {
+		return nil, fmt.Errorf("RATE_LIMIT_WINDOW must be at least 1 second")
+	}
+	if cfg.RateLimitCleanup < 1 {
+		return nil, fmt.Errorf("RATE_LIMIT_CLEANUP must be at least 1 second")
+	}
+	if cfg.CounterReadCacheMaxEntries < 1 {
+		return nil, fmt.Errorf("COUNTER_READ_CACHE_MAX_ENTRIES must be at least 1")
+	}
+	if cfg.CounterReadCacheTTLSeconds < 1 {
+		return nil, fmt.Errorf("COUNTER_READ_CACHE_TTL_SECONDS must be at least 1 second")
+	}
+	if cfg.ServerPort < 1 || cfg.ServerPort > 65535 {
+		return nil, fmt.Errorf("SERVER_PORT must be between 1 and 65535")
 	}
 
 	// Validate Sentry configuration
@@ -122,6 +184,22 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func warnLegacyCacheSettings() {
+	for _, key := range []string{
+		"CACHE_ENABLED",
+		"CACHE_SIZE",
+		"CACHE_TTL_SECONDS",
+		"CACHE_WORKERS",
+		"CACHE_QUEUE_SIZE",
+		"CACHE_SHUTDOWN_WAIT",
+	} {
+		if _, ok := os.LookupEnv(key); ok {
+			log.Printf("WARNING: %s is deprecated and ignored; PostgreSQL is the sole counter data path", key)
+			return
+		}
+	}
 }
 
 func getEnv(key, defaultValue string) string {

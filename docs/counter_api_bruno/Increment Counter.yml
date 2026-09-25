@@ -9,6 +9,8 @@ http:
   headers:
     - name: Content-Type
       value: application/json
+    - name: Idempotency-Key
+      value: 01912345-6789-7000-8000-000000000003
   auth: inherit
 
 runtime:
@@ -29,9 +31,10 @@ docs: |-
 
   Increments a counter value by a specified delta amount. Useful for tracking events like page views, clicks, or any countable metric.
 
-  **Authentication:** None required (public endpoint)
+  **Authentication:** V1 keeps its existing route policy. New clients should
+  use V2 with a `counter:increment` scoped key and required idempotency key.
 
-  **Rate Limit:** 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)
+  **Rate Limit:** Controlled by the configured API rate limits.
 
   ## URL Parameters
   - `tenant_id` (UUID, required): The unique identifier of the tenant
@@ -41,11 +44,17 @@ docs: |-
   - `delta` (integer, optional): Amount to increment by (default: 1, must be positive)
     - Example: `?delta=5` increments by 5
 
+  ## Headers
+  - `Idempotency-Key` (UUID, optional for V1): Reusing the same key and request returns the original result without applying the increment again
+
   ## Response (200 OK)
   ```json
   {
+    "operation_id": "01912345-6789-7000-8000-000000000003",
     "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
+    "delta": 5,
     "value": 1524,
+    "replayed": false,
     "updated_at": "2026-04-08T10:35:50Z"
   }
   ```
@@ -55,6 +64,8 @@ docs: |-
   - 400 INVALID_DELTA - Delta parameter is not a positive integer
   - 404 COUNTER_NOT_FOUND - Counter does not exist
   - 400 COUNTER_OVERFLOW - Increment would cause integer overflow
+  - 409 IDEMPOTENCY_KEY_REUSED - Idempotency key was reused with different request data
+  - 409 OPERATION_IN_PROGRESS - The operation is already being completed
   - 429 RATE_LIMIT_EXCEEDED - Too many requests
 
   ## Examples

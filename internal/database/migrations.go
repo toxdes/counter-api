@@ -11,7 +11,8 @@ func GetMigrationStatus(db *DB) (map[int64]bool, error) {
 	err := db.Get(&tableExists, `
 		SELECT EXISTS (
 			SELECT FROM information_schema.tables
-			WHERE table_name = 'schema_migrations'
+			WHERE table_schema = current_schema()
+			  AND table_name = 'schema_migrations'
 		)
 	`)
 	if err != nil {

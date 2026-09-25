@@ -46,7 +46,7 @@
 <body>
     <header>
         <h1>Counter API</h1>
-        <p>A simple counter service with tenant isolation</p>
+        <p>V2 is the recommended contract for new clients. Counter mutations require an Idempotency-Key and are recorded in durable operation history. Unversioned routes remain V1 for compatibility.</p>
     </header>
 
     <div class="container">
@@ -59,6 +59,11 @@
                 <li><a href="#create-counter"><span class="method POST">POST</span> Create Counter</a></li>
                 <li><a href="#increment-counter"><span class="method POST">POST</span> Increment Counter</a></li>
                 <li><a href="#set-counter"><span class="method POST">POST</span> Set Counter</a></li>
+                <li><a href="#list-counters"><span class="method GET">GET</span> List Counters</a></li>
+                <li><a href="#v2-get-counter"><span class="method GET">GET</span> V2 Get Counter</a></li>
+                <li><a href="#v2-increment-counter"><span class="method POST">POST</span> V2 Increment Counter</a></li>
+                <li><a href="#v2-set-counter"><span class="method POST">POST</span> V2 Set Counter</a></li>
+                <li><a href="#v2-operation-history"><span class="method GET">GET</span> V2 Operation History</a></li>
             </ul>
         </div>
         <div class="endpoint" id="create-tenant">
@@ -68,10 +73,10 @@
             </div>
             <div class="endpoint-url">{{BASE_URL}}/tenants</div>
             <div class="endpoint-content">
-<p># Create Tenant</p>
+<h3>Create Tenant</h3>
 <p>Creates a new tenant with a unique label. Tenants act as isolated workspaces that contain counters.</p>
-<p><strong>Authentication:<strong> Requires API key via X-Api-Key header</p>
-<p><strong>Rate Limit:<strong> 10 requests per minute (configurable via RATE<em>LIMIT<em>REQUESTS)</p>
+<p><strong>Authentication:</strong> Requires API key via X-Api-Key header</p>
+<p><strong>Rate Limit:</strong> 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)</p>
 <h3>Request Body</h3>
 <pre><code>{
   "label": "production"
@@ -79,7 +84,7 @@
 </code></pre>
 <h4>Fields</h4>
 <ul>
-<li><code>label<code> (string, required): Unique identifier for the tenant</li>
+<li><code>label</code> (string, required): Unique identifier for the tenant</li>
 <li>Min: 1 character, Max: 255 characters</li>
 <li>Allowed: alphanumeric, spaces, hyphens, underscores, dots</li>
 <li>Must be unique across all tenants</li>
@@ -94,11 +99,11 @@
 </code></pre>
 <h3>Errors</h3>
 <div class="error-box"><ul>
-<li>400 INVALID<em>JSON - Invalid JSON in request body</li>
-<li>400 INVALID<em>PARAMETER - Label validation failed</li>
-<li>409 TENANT<em>LABEL<em>EXISTS - Label already in use</li>
+<li>400 INVALID_JSON - Invalid JSON in request body</li>
+<li>400 INVALID_PARAMETER - Label validation failed</li>
+<li>409 TENANT_LABEL_EXISTS - Label already in use</li>
 <li>401 UNAUTHORIZED - Missing or invalid API key</li>
-<li>429 RATE<em>LIMIT<em>EXCEEDED - Too many requests</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
 </ul></div>
 
             </div>
@@ -110,14 +115,16 @@
             </div>
             <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}/counters/{{counter_id}}</div>
             <div class="endpoint-content">
-<p># Get Counter</p>
+<h3>Get Counter</h3>
 <p>Retrieves the current value and details of a specific counter.</p>
-<p><strong>Authentication:<strong> None required (public endpoint)</p>
-<p><strong>Rate Limit:<strong> 30 requests per minute (configurable via RATE<em>LIMIT<em>GET<em>MULTIPLIER)</p>
+<p><strong>Authentication:</strong> Requires a key with <code>counter:read</code> (administrator keys</p>
+<p>are also accepted).</p>
+<p>This is the legacy V1 route. New clients should use the equivalent V2 route,</p>
+<p>which uses the configured read-through cache.</p>
 <h3>URL Parameters</h3>
 <ul>
-<li><code>tenant<em>id<code> (UUID, required): The unique identifier of the tenant</li>
-<li><code>counter<em>id<code> (UUID, required): The unique identifier of the counter</li>
+<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
+<li><code>counter_id</code> (UUID, required): The unique identifier of the counter</li>
 </ul></div>
 <h3>Response (200 OK)</h3>
 <pre><code>{
@@ -131,9 +138,9 @@
 </code></pre>
 <h3>Errors</h3>
 <div class="error-box"><ul>
-<li>400 INVALID<em>UUID - Invalid tenant<em>id or counter<em>id format</li>
-<li>404 COUNTER<em>NOT<em>FOUND - Counter does not exist</li>
-<li>429 RATE<em>LIMIT<em>EXCEEDED - Too many requests</li>
+<li>400 INVALID_UUID - Invalid tenant_id or counter_id format</li>
+<li>404 COUNTER_NOT_FOUND - Counter does not exist</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
 </ul></div>
 
             </div>
@@ -145,13 +152,13 @@
             </div>
             <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}</div>
             <div class="endpoint-content">
-<p># Get Tenant</p>
+<h3>Get Tenant</h3>
 <p>Retrieves tenant information by tenant ID.</p>
-<p><strong>Authentication:<strong> None required (public endpoint)</p>
-<p><strong>Rate Limit:<strong> 30 requests per minute (configurable via RATE<em>LIMIT<em>GET<em>MULTIPLIER)</p>
+<p><strong>Authentication:</strong> None required (public endpoint)</p>
+<p><strong>Rate Limit:</strong> 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)</p>
 <h3>URL Parameters</h3>
 <ul>
-<li><code>tenant<em>id<code> (UUID, required): The unique identifier of the tenant</li>
+<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
 </ul></div>
 <h3>Response (200 OK)</h3>
 <pre><code>{
@@ -163,9 +170,9 @@
 </code></pre>
 <h3>Errors</h3>
 <div class="error-box"><ul>
-<li>400 INVALID<em>UUID - Invalid tenant<em>id format</li>
-<li>404 TENANT<em>NOT<em>FOUND - Tenant does not exist</li>
-<li>429 RATE<em>LIMIT<em>EXCEEDED - Too many requests</li>
+<li>400 INVALID_UUID - Invalid tenant_id format</li>
+<li>404 TENANT_NOT_FOUND - Tenant does not exist</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
 </ul></div>
 
             </div>
@@ -177,13 +184,16 @@
             </div>
             <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}/counters</div>
             <div class="endpoint-content">
-<p># Create Counter</p>
+<h3>Create Counter</h3>
 <p>Creates a new counter under the specified tenant.</p>
-<p><strong>Authentication:<strong> Requires API key via X-Api-Key header</p>
-<p><strong>Rate Limit:<strong> 10 requests per minute (configurable via RATE<em>LIMIT<em>REQUESTS)</p>
+<p><strong>Authentication:</strong> Requires an administrator key or tenant-scoped key with</p>
+<p>the <code>counter:create</code> scope.</p>
+<p><strong>Rate Limit:</strong> 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)</p>
+<p>Counter creation currently remains on the V1 route for compatibility. New</p>
+<p>counter mutations and reads are documented under the V2 routes.</p>
 <h3>URL Parameters</h3>
 <ul>
-<li><code>tenant<em>id<code> (UUID, required): The unique identifier of the tenant</li>
+<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
 </ul></div>
 <h3>Request Body</h3>
 <pre><code>{
@@ -193,10 +203,10 @@
 </code></pre>
 <h4>Fields</h4>
 <ul>
-<li><code>label<code> (string, optional): Counter label</li>
+<li><code>label</code> (string, optional): Counter label</li>
 <li>Min: 1 character, Max: 255 characters</li>
 <li>Must be unique within this tenant</li>
-<li><code>initial<em>value<code> (integer, optional): Starting value (default: 0)</li>
+<li><code>initial_value</code> (integer, optional): Starting value (default: 0)</li>
 <li>Range: int64 min to max</li>
 </ul></div>
 <h3>Response (201 Created)</h3>
@@ -211,13 +221,13 @@
 </code></pre>
 <h3>Errors</h3>
 <div class="error-box"><ul>
-<li>400 INVALID<em>JSON - Invalid JSON in request body</li>
-<li>400 INVALID<em>UUID - Invalid tenant<em>id format</li>
-<li>400 INVALID<em>PARAMETER - Parameter validation failed</li>
-<li>404 TENANT<em>NOT<em>FOUND - Tenant does not exist</li>
-<li>409 COUNTER<em>LABEL<em>EXISTS - Label already exists for this tenant</li>
+<li>400 INVALID_JSON - Invalid JSON in request body</li>
+<li>400 INVALID_UUID - Invalid tenant_id format</li>
+<li>400 INVALID_PARAMETER - Parameter validation failed</li>
+<li>404 TENANT_NOT_FOUND - Tenant does not exist</li>
+<li>409 COUNTER_LABEL_EXISTS - Label already exists for this tenant</li>
 <li>401 UNAUTHORIZED - Missing or invalid API key</li>
-<li>429 RATE<em>LIMIT<em>EXCEEDED - Too many requests</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
 </ul></div>
 
             </div>
@@ -229,40 +239,50 @@
             </div>
             <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}/counters/{{counter_id}}/inc</div>
             <div class="endpoint-content">
-<p># Increment Counter</p>
+<h3>Increment Counter</h3>
 <p>Increments a counter value by a specified delta amount. Useful for tracking events like page views, clicks, or any countable metric.</p>
-<p><strong>Authentication:<strong> None required (public endpoint)</p>
-<p><strong>Rate Limit:<strong> 30 requests per minute (configurable via RATE<em>LIMIT<em>GET<em>MULTIPLIER)</p>
+<p><strong>Authentication:</strong> V1 keeps its existing route policy. New clients should</p>
+<p>use V2 with a <code>counter:increment</code> scoped key and required idempotency key.</p>
+<p><strong>Rate Limit:</strong> Controlled by the configured API rate limits.</p>
 <h3>URL Parameters</h3>
 <ul>
-<li><code>tenant<em>id<code> (UUID, required): The unique identifier of the tenant</li>
-<li><code>counter<em>id<code> (UUID, required): The unique identifier of the counter</li>
+<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
+<li><code>counter_id</code> (UUID, required): The unique identifier of the counter</li>
 </ul></div>
 <h3>Query Parameters</h3>
 <ul>
-<li><code>delta<code> (integer, optional): Amount to increment by (default: 1, must be positive)</li>
-<li>Example: <code>?delta=5<code> increments by 5</li>
+<li><code>delta</code> (integer, optional): Amount to increment by (default: 1, must be positive)</li>
+<li>Example: <code>?delta=5</code> increments by 5</li>
+</ul></div>
+<h3>Headers</h3>
+<ul>
+<li><code>Idempotency-Key</code> (UUID, optional for V1): Reusing the same key and request returns the original result without applying the increment again</li>
 </ul></div>
 <h3>Response (200 OK)</h3>
 <pre><code>{
+  "operation_id": "01912345-6789-7000-8000-000000000003",
   "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
+  "delta": 5,
   "value": 1524,
+  "replayed": false,
   "updated_at": "2026-04-08T10:35:50Z"
 }
 </code></pre>
 <h3>Errors</h3>
 <div class="error-box"><ul>
-<li>400 INVALID<em>UUID - Invalid tenant<em>id or counter<em>id format</li>
-<li>400 INVALID<em>DELTA - Delta parameter is not a positive integer</li>
-<li>404 COUNTER<em>NOT<em>FOUND - Counter does not exist</li>
-<li>400 COUNTER<em>OVERFLOW - Increment would cause integer overflow</li>
-<li>429 RATE<em>LIMIT<em>EXCEEDED - Too many requests</li>
+<li>400 INVALID_UUID - Invalid tenant_id or counter_id format</li>
+<li>400 INVALID_DELTA - Delta parameter is not a positive integer</li>
+<li>404 COUNTER_NOT_FOUND - Counter does not exist</li>
+<li>400 COUNTER_OVERFLOW - Increment would cause integer overflow</li>
+<li>409 IDEMPOTENCY_KEY_REUSED - Idempotency key was reused with different request data</li>
+<li>409 OPERATION_IN_PROGRESS - The operation is already being completed</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
 </ul></div>
 <h3>Examples</h3>
 <ul>
-<li>Increment by 1: <code>POST .../inc<code> (defaults to delta=1)</li>
-<li>Increment by 5: <code>POST .../inc?delta=5<code></li>
-<li>Increment by 10: <code>POST .../inc?delta=10<code></li>
+<li>Increment by 1: <code>POST .../inc</code> (defaults to delta=1)</li>
+<li>Increment by 5: <code>POST .../inc?delta=5</code></li>
+<li>Increment by 10: <code>POST .../inc?delta=10</code></li>
 </ul></div>
 
             </div>
@@ -274,14 +294,15 @@
             </div>
             <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}/counters/{{counter_id}}/set</div>
             <div class="endpoint-content">
-<p># Set Counter Value</p>
-<p>Sets a counter to a specific value. Useful for resetting counters or setting them to a known state.</p>
-<p><strong>Authentication:<strong> Requires API key via X-Api-Key header</p>
-<p><strong>Rate Limit:<strong> 10 requests per minute (configurable via RATE<em>LIMIT<em>REQUESTS)</p>
+<h3>Set Counter Value</h3>
+<p>Legacy V1 set route. New clients should use the V2 set route, which requires</p>
+<p>an idempotency key and records the adjustment in operation history.</p>
+<p><strong>Authentication:</strong> Requires API key via X-Api-Key header</p>
+<p><strong>Rate Limit:</strong> 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)</p>
 <h3>URL Parameters</h3>
 <ul>
-<li><code>tenant<em>id<code> (UUID, required): The unique identifier of the tenant</li>
-<li><code>counter<em>id<code> (UUID, required): The unique identifier of the counter</li>
+<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
+<li><code>counter_id</code> (UUID, required): The unique identifier of the counter</li>
 </ul></div>
 <h3>Request Body</h3>
 <pre><code>{
@@ -290,26 +311,175 @@
 </code></pre>
 <h4>Fields</h4>
 <ul>
-<li><code>value<code> (integer, optional): The new value to set</li>
+<li><code>value</code> (integer, optional): The new value to set</li>
 <li>Range: int64 min to max</li>
 <li>If omitted, counter is set to 0</li>
 </ul></div>
 <h3>Response (200 OK)</h3>
 <pre><code>{
+  "operation_id": "01912345-6789-7000-8000-000000000004",
   "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
+  "delta": 53,
   "value": 100,
+  "replayed": false,
   "updated_at": "2026-04-08T10:35:50Z"
 }
 </code></pre>
 <h3>Errors</h3>
 <div class="error-box"><ul>
-<li>400 INVALID<em>JSON - Invalid JSON in request body</li>
-<li>400 INVALID<em>UUID - Invalid tenant<em>id or counter<em>id format</li>
-<li>400 INVALID<em>VALUE - Value is out of valid range</li>
-<li>404 COUNTER<em>NOT<em>FOUND - Counter does not exist</li>
+<li>400 INVALID_JSON - Invalid JSON in request body</li>
+<li>400 INVALID_UUID - Invalid tenant_id or counter_id format</li>
+<li>400 INVALID_VALUE - Value is out of valid range</li>
+<li>404 COUNTER_NOT_FOUND - Counter does not exist</li>
 <li>401 UNAUTHORIZED - Missing or invalid API key</li>
-<li>429 RATE<em>LIMIT<em>EXCEEDED - Too many requests</li>
+<li>409 IDEMPOTENCY_KEY_REUSED - Idempotency key was reused with different request data</li>
+<li>409 OPERATION_IN_PROGRESS - The operation is already being completed</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
 </ul></div>
+
+            </div>
+        </div>
+        <div class="endpoint" id="list-counters">
+            <div class="endpoint-header">
+                <span class="method GET">GET</span>
+                <h2 class="endpoint-title">List Counters</h2>
+            </div>
+            <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}/counters</div>
+            <div class="endpoint-content">
+<h3>List Counters</h3>
+<p>Lists all counters belonging to a tenant with cursor-based pagination.</p>
+<p><strong>Authentication:</strong> Requires API key via X-Api-Key header</p>
+<p><strong>Rate Limit:</strong> 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)</p>
+<h3>URL Parameters</h3>
+<ul>
+<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
+</ul></div>
+<h3>Query Parameters</h3>
+<ul>
+<li><code>limit</code> (integer, optional): Maximum number of counters to return (default: 20, max: 100)</li>
+<li><code>cursor</code> (string, optional): Opaque pagination token from a previous response&#39;s <code>next_cursor</code></li>
+</ul></div>
+<h3>Response (200 OK)</h3>
+<pre><code>{
+  "counters": [
+    {
+      "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
+      "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+      "label": "page_views",
+      "value": 1523,
+      "max_delta": 50,
+      "created_at": "2026-04-08T10:30:00Z",
+      "updated_at": "2026-04-08T10:35:42Z"
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNC0wOFQxMDozNTo0MloiLCJpZCI6IjQxNTM3ODQyLWU0NjMtNDVhZi05YWM5LThlNDYzOWFhODVkMiJ9"
+}
+</code></pre>
+<h4>Fields</h4>
+<ul>
+<li><code>counters</code> (array): List of counter objects for this tenant</li>
+<li><code>next_cursor</code> (string, nullable): Opaque token for the next page. <code>null</code> when there are no more counters</li>
+</ul></div>
+<h3>Pagination</h3>
+<p>Use <code>limit</code> to control page size and pass the returned <code>next_cursor</code> as the <code>cursor</code> query parameter to retrieve the next page. The cursor is an opaque base64-encoded token — do not construct or modify it.</p>
+<h3>Errors</h3>
+<div class="error-box"><ul>
+<li>400 INVALID_UUID - Invalid tenant_id format</li>
+<li>400 INVALID_PARAMETER - limit is not between 1 and 100</li>
+<li>400 INVALID_CURSOR - Cursor is malformed</li>
+<li>404 TENANT_NOT_FOUND - Tenant does not exist</li>
+<li>401 UNAUTHORIZED - Missing or invalid API key</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
+</ul></div>
+<h3>Examples</h3>
+<ul>
+<li>First page (20 counters): <code>GET .../counters?limit=20</code></li>
+<li>Next page: <code>GET .../counters?limit=20&amp;cursor=&lt;next_cursor_from_previous_response&gt;</code></li>
+<li>Custom page size: <code>GET .../counters?limit=50</code></li>
+</ul></div>
+
+            </div>
+        </div>
+        <div class="endpoint" id="v2-get-counter">
+            <div class="endpoint-header">
+                <span class="method GET">GET</span>
+                <h2 class="endpoint-title">V2 Get Counter</h2>
+            </div>
+            <div class="endpoint-url">{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}</div>
+            <div class="endpoint-content">
+<h3>V2 Get Counter</h3>
+<p>Reads the current counter value using a tenant-scoped credential with the</p>
+<p><code>counter:read</code> scope. V2 reads use the configured bounded read-through cache;</p>
+<p>see the deployment guide for cache configuration and consistency behavior.</p>
+<h3>Request</h3>
+<pre><code>GET /v2/tenants/{tenant_id}/counters/{counter_id}
+X-API-Key: tenant-scoped-key
+</code></pre>
+<p>V2 is the recommended contract for new clients. See <code>docs/api-v2.md</code> for the</p>
+<p>canonical contract; mutations require an <code>Idempotency-Key</code>.</p>
+
+            </div>
+        </div>
+        <div class="endpoint" id="v2-increment-counter">
+            <div class="endpoint-header">
+                <span class="method POST">POST</span>
+                <h2 class="endpoint-title">V2 Increment Counter</h2>
+            </div>
+            <div class="endpoint-url">{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/inc?delta=5</div>
+            <div class="endpoint-content">
+<h3>V2 Increment Counter</h3>
+<p>Applies a durable increment. Use a fresh UUID idempotency key for each</p>
+<p>logical mutation and reuse that same key on transport retries. Requires a</p>
+<p>tenant-scoped credential with <code>counter:increment</code>.</p>
+<h3>Request</h3>
+<pre><code>POST /v2/tenants/{tenant_id}/counters/{counter_id}/inc?delta=5
+X-API-Key: tenant-scoped-key
+Idempotency-Key: 01912345-6789-7000-8000-000000000003
+</code></pre>
+<p>The counter update and operation-history record commit together in</p>
+<p>PostgreSQL. See <code>docs/api-v2.md</code> for response and error details.</p>
+
+            </div>
+        </div>
+        <div class="endpoint" id="v2-set-counter">
+            <div class="endpoint-header">
+                <span class="method POST">POST</span>
+                <h2 class="endpoint-title">V2 Set Counter</h2>
+            </div>
+            <div class="endpoint-url">{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/set</div>
+            <div class="endpoint-content">
+<h3>V2 Set Counter</h3>
+<p>Sets a counter to a value and records the adjustment in operation history.</p>
+<p>Requires <code>counter:adjust</code> and a UUID <code>Idempotency-Key</code>. Reuse the key only</p>
+<p>when retrying the same logical request.</p>
+<h3>Request</h3>
+<pre><code>POST /v2/tenants/{tenant_id}/counters/{counter_id}/set
+X-API-Key: tenant-scoped-key
+Idempotency-Key: 01912345-6789-7000-8000-000000000004
+Content-Type: application/json
+
+{"value": 100}
+</code></pre>
+<p>See <code>docs/api-v2.md</code> for response and error details.</p>
+
+            </div>
+        </div>
+        <div class="endpoint" id="v2-operation-history">
+            <div class="endpoint-header">
+                <span class="method GET">GET</span>
+                <h2 class="endpoint-title">V2 Operation History</h2>
+            </div>
+            <div class="endpoint-url">{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/operations?limit=50</div>
+            <div class="endpoint-content">
+<h3>V2 Operation History</h3>
+<p>Returns paginated, reverse-chronological counter operations. Requires a</p>
+<p>tenant-scoped credential with <code>counter:history</code>.</p>
+<h3>Request</h3>
+<pre><code>GET /v2/tenants/{tenant_id}/counters/{counter_id}/operations?limit=50
+X-API-Key: tenant-scoped-key
+</code></pre>
+<p>Pass the opaque <code>next_cursor</code> from a response unchanged to fetch the next</p>
+<p>page. See <code>docs/api-v2.md</code> for response details.</p>
 
             </div>
         </div>

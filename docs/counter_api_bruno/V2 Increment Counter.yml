@@ -1,0 +1,38 @@
+info:
+  name: V2 Increment Counter
+  type: http
+  seq: 11
+
+http:
+  method: POST
+  url: "{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/inc?delta=5"
+  headers:
+    - name: X-Api-Key
+      value: "{{TENANT_API_KEY}}"
+    - name: Idempotency-Key
+      value: 01912345-6789-7000-8000-000000000003
+  auth: inherit
+
+runtime:
+  variables:
+    - name: tenant_id
+      value: 01912345-6789-7000-8000-000000000001
+    - name: counter_id
+      value: 01912345-6789-7000-8000-000000000002
+
+docs: |-
+  # V2 Increment Counter
+
+  Applies a durable increment. Use a fresh UUID idempotency key for each
+  logical mutation and reuse that same key on transport retries. Requires a
+  tenant-scoped credential with `counter:increment`.
+
+  ## Request
+  ```http
+  POST /v2/tenants/{tenant_id}/counters/{counter_id}/inc?delta=5
+  X-API-Key: tenant-scoped-key
+  Idempotency-Key: 01912345-6789-7000-8000-000000000003
+  ```
+
+  The counter update and operation-history record commit together in
+  PostgreSQL. See `docs/api-v2.md` for response and error details.

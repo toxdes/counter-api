@@ -2,7 +2,9 @@
 
 ## Overview
 
-The rate limiter now only trusts `X-Real-IP` and `X-Forwarded-For` headers from **trusted proxies** (localhost/private networks) to prevent IP spoofing attacks.
+The rate limiter trusts forwarded client-IP headers only from the local nginx
+proxy. The application binds to `127.0.0.1` by default, so the public ingress
+path should be Cloudflare (if used) → nginx → Counter API.
 
 ## Deployment Configurations
 
@@ -93,53 +95,13 @@ server {
 
 ---
 
-### ⚠️ Behind CDN (Cloudflare, Fastly, AWS CloudFront)
+### ⚠️ Behind Cloudflare
 
-**Problem:** CDN IPs are **public**, not trusted by default.
-
-**Solution: Whitelist CDN IP Ranges**
-
-Add to your deployment:
-
-```go
-// In production, configure trusted proxy CIDR ranges
-var trustedProxyCIDRs = []string{
-    "127.0.0.1/32",           // Localhost
-    "10.0.0.0/8",             // Private network
-    "172.16.0.0/12",          // Private network
-    "192.168.0.0/16",         // Private network
-    // Add your CDN/proxy ranges:
-    "173.245.48.0/20",        // Cloudflare (example)
-    "167.82.0.0/17",          // Fastly (example)
-}
-
-func isTrustedProxy(ip net.IP) bool {
-    for _, cidr := range trustedProxyCIDRs {
-        _, network, _ := net.ParseCIDR(cidr)
-        if network.Contains(ip) {
-            return true
-        }
-    }
-    return false
-}
-```
-
-**Cloudflare specific:**
-```bash
-# Cloudflare IP ranges (from https://www.cloudflare.com/ips/)
-173.245.48.0/20
-103.21.244.0/22
-103.22.200.0/22
-103.31.4.0/22
-141.101.64.0/18
-108.162.192.0/18
-190.93.240.0/20
-188.114.96.0/20
-197.234.240.0/22
-198.41.128.0/17
-162.158.0.0/15
-192.0.0.0/24
-```
+Use the repository's `nginx.conf`, which trusts Cloudflare CIDRs and consumes
+`CF-Connecting-IP` before forwarding the normalized address to Go. Do not add
+Cloudflare CIDRs to the Go application: Go should trust only its loopback nginx
+peer. Keep the VPS firewall restricted to Cloudflare's current IPv4 and IPv6
+ranges, and update the nginx allowlist when Cloudflare changes them.
 
 ---
 

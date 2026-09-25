@@ -29,9 +29,11 @@ docs: |-
 
   Retrieves the current value and details of a specific counter.
 
-  **Authentication:** None required (public endpoint)
+  **Authentication:** Requires a key with `counter:read` (administrator keys
+  are also accepted).
 
-  **Rate Limit:** 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)
+  This is the legacy V1 route. New clients should use the equivalent V2 route,
+  which uses the configured read-through cache.
 
   ## URL Parameters
   - `tenant_id` (UUID, required): The unique identifier of the tenant

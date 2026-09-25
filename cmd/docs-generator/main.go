@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"sort"
@@ -124,7 +125,7 @@ func generateHTML(requests []BrunoRequest) string {
 <body>
     <header>
         <h1>Counter API</h1>
-        <p>A simple counter service with tenant isolation</p>
+        <p>V2 is the recommended contract for new clients. Counter mutations require an Idempotency-Key and are recorded in durable operation history. Unversioned routes remain V1 for compatibility.</p>
     </header>
 
     <div class="container">
@@ -209,6 +210,12 @@ func renderMarkdown(md string) string {
 			result.WriteString(fmt.Sprintf("<h4>%s</h4>\n", content))
 			continue
 		}
+		if strings.HasPrefix(trimmed, "# ") {
+			closeList(&result, &inList)
+			content := strings.TrimPrefix(trimmed, "# ")
+			result.WriteString(fmt.Sprintf("<h3>%s</h3>\n", renderInlineMarkdown(content)))
+			continue
+		}
 		if strings.HasPrefix(trimmed, "## ") {
 			closeList(&result, &inList)
 			content := strings.TrimPrefix(trimmed, "## ")
@@ -260,13 +267,32 @@ func renderMarkdown(md string) string {
 }
 
 func renderInlineMarkdown(text string) string {
-	// Code
-	text = strings.ReplaceAll(text, "`", "<code>")
-	// Bold
-	text = strings.ReplaceAll(text, "**", "<strong>")
-	// Italic
-	text = strings.ReplaceAll(text, "_", "<em>")
-	return text
+	var result strings.Builder
+	for len(text) > 0 {
+		codeAt := strings.IndexByte(text, '`')
+		boldAt := strings.Index(text, "**")
+		markerAt, marker, tag := -1, "", ""
+		if codeAt >= 0 {
+			markerAt, marker, tag = codeAt, "`", "code"
+		}
+		if boldAt >= 0 && (markerAt < 0 || boldAt < markerAt) {
+			markerAt, marker, tag = boldAt, "**", "strong"
+		}
+		if markerAt < 0 {
+			result.WriteString(html.EscapeString(text))
+			break
+		}
+		result.WriteString(html.EscapeString(text[:markerAt]))
+		afterMarker := text[markerAt+len(marker):]
+		endAt := strings.Index(afterMarker, marker)
+		if endAt < 0 {
+			result.WriteString(html.EscapeString(text[markerAt:]))
+			break
+		}
+		result.WriteString("<" + tag + ">" + html.EscapeString(afterMarker[:endAt]) + "</" + tag + ">")
+		text = afterMarker[endAt+len(marker):]
+	}
+	return result.String()
 }
 
 func closeList(sb *strings.Builder, inList *bool) {

@@ -1,0 +1,34 @@
+info:
+  name: V2 Operation History
+  type: http
+  seq: 13
+
+http:
+  method: GET
+  url: "{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/operations?limit=50"
+  headers:
+    - name: X-Api-Key
+      value: "{{TENANT_API_KEY}}"
+  auth: inherit
+
+runtime:
+  variables:
+    - name: tenant_id
+      value: 01912345-6789-7000-8000-000000000001
+    - name: counter_id
+      value: 01912345-6789-7000-8000-000000000002
+
+docs: |-
+  # V2 Operation History
+
+  Returns paginated, reverse-chronological counter operations. Requires a
+  tenant-scoped credential with `counter:history`.
+
+  ## Request
+  ```http
+  GET /v2/tenants/{tenant_id}/counters/{counter_id}/operations?limit=50
+  X-API-Key: tenant-scoped-key
+  ```
+
+  Pass the opaque `next_cursor` from a response unchanged to fetch the next
+  page. See `docs/api-v2.md` for response details.

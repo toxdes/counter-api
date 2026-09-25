@@ -12,7 +12,7 @@ Internet
     v
 Nginx (port 80/443)
     |
-    v (X-Real-IP header)
+    v (normalized X-Real-IP header)
 Counter API (localhost:8080)
 ```
 
@@ -26,6 +26,11 @@ Counter API (localhost:8080)
 ---
 
 ## Installation Steps
+
+For a Cloudflare-proxied deployment, use the checked-in `nginx.conf`. It
+validates Cloudflare as the immediate proxy, reads `CF-Connecting-IP`, and
+replaces inbound forwarding headers before sending requests to the API. Do not
+use an unmodified generic proxy block in front of a Cloudflare origin.
 
 ### 1. Install Nginx
 
@@ -94,7 +99,8 @@ sudo systemctl start counter
 # From your local machine
 curl -v https://api.yourdomain.com/tenants/test-tenant 2>&1 | grep -i "x-real-ip"
 
-# Should see your IP address
+# The API does not echo this header; verify the normalized address in nginx or
+# application logs instead.
 ```
 
 ### Test 2: Verify Rate Limiting Works
@@ -142,10 +148,10 @@ curl https://www.ssllabs.com/ssltest/analyze.html?d=api.yourdomain.com
 
 **Symptoms:** All requests appear to come from same IP
 
-**Fix:** Ensure nginx is passing client IP:
+**Fix:** Ensure nginx is replacing client-controlled forwarding headers:
 ```nginx
 proxy_set_header X-Real-IP $remote_addr;
-proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-For $remote_addr;
 ```
 
 ### Issue: "502 Bad Gateway"

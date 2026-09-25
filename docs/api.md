@@ -10,19 +10,48 @@ http://localhost:8080
 
 ### Authentication
 
-Admin endpoints require an API key in the `X-API-Key` header:
+Protected endpoints require an API key in the `X-API-Key` header. For new
+clients, prefer tenant-scoped credentials and the V2 contract:
 
 ```
 X-API-Key: your-secret-api-key-here
 ```
 
-Public endpoints do not require authentication but are rate-limited.
+Some legacy V1 endpoints retain their existing public policy; see each endpoint
+below. V2 endpoints require a credential with the documented tenant scope.
+
+## API Versioning and Compatibility
+
+The existing unversioned routes are V1 and remain supported for backward
+compatibility. V1 accepts an optional `Idempotency-Key`; clients that provide a
+valid UUID receive idempotency protection. Requests without a key remain
+supported, but transport retries cannot be proven to represent the same logical
+mutation.
+
+Contract changes that require stricter behavior are introduced under `/v2`.
+See [the V2 API reference](api-v2.md).
 
 ### Making Requests
 
 All requests should use `Content-Type: application/json` for request bodies.
+The server returns an `X-Request-ID` response header. If a caller supplies a
+bounded `X-Request-ID`, it is propagated; otherwise the server generates one.
 
 ## Endpoints
+
+### Operations and Health
+
+`GET /livez` checks only whether the process is alive and does not require
+PostgreSQL. `GET /readyz` returns `200` only after startup has completed, the
+database schema matches the binary, the process is not draining, and a
+bounded PostgreSQL ping succeeds. Load balancers should use `/readyz` for
+traffic eligibility and `/livez` for process supervision.
+
+`GET /metrics` is administrator-protected and returns Prometheus text
+including route/status request counts and durations, database pool usage and
+waits, Go goroutine/heap/GC snapshots, overload/rate-limit/idempotency events,
+build version, and schema version. It must not be exposed directly to the public
+internet.
 
 ### Admin Endpoints
 
@@ -81,7 +110,7 @@ Creates a new counter under a tenant.
 **Request**
 
 ```http
-POST /tenants/{tenant_id}
+POST /tenants/{tenant_id}/counters
 X-API-Key: your-api-key
 Content-Type: application/json
 
@@ -91,6 +120,9 @@ Content-Type: application/json
   "max_delta": 100
 }
 ```
+
+**Authentication:** Administrator key or a tenant-scoped key with
+`counter:create`.
 
 **Parameters**
 
@@ -154,7 +186,7 @@ Content-Type: application/json
 
 `next_cursor` is `null` when all counters have been returned.
 
-#### Set Counter Value
+#### Set Counter Value (V1)
 
 Sets a counter to a specific value. Requires API key.
 
@@ -163,6 +195,7 @@ Sets a counter to a specific value. Requires API key.
 ```http
 POST /tenants/{tenant_id}/counters/{counter_id}/set
 X-API-Key: your-api-key
+Idempotency-Key: 01912345-6789-7000-8000-000000000004 (optional for V1)
 Content-Type: application/json
 
 {
@@ -177,8 +210,11 @@ Content-Type: application/json
 Content-Type: application/json
 
 {
+  "operation_id": "01912345-6789-7000-8000-000000000004",
   "counter_id": "01912345-6789-7000-8000-000000000002",
+  "delta": 53,
   "value": 100,
+  "replayed": false,
   "updated_at": "2026-04-07T12:03:00Z"
 }
 ```
@@ -218,7 +254,7 @@ Retrieves a counter by ID.
 **Request**
 
 ```http
-GET /tenants/{tenant_id}/{counter_id}
+GET /tenants/{tenant_id}/counters/{counter_id}
 ```
 
 **Response**
@@ -246,6 +282,7 @@ Increments a counter by a specified delta.
 
 ```http
 POST /tenants/{tenant_id}/{counter_id}/inc?delta=5
+Idempotency-Key: 01912345-6789-7000-8000-000000000003 (optional)
 ```
 
 Query parameters:
@@ -276,8 +313,11 @@ Content-Type: application/json
 Content-Type: application/json
 
 {
+  "operation_id": "01912345-6789-7000-8000-000000000003",
   "counter_id": "01912345-6789-7000-8000-000000000002",
+  "delta": 5,
   "value": 47,
+  "replayed": false,
   "updated_at": "2026-04-07T12:02:00Z"
 }
 ```
@@ -298,6 +338,11 @@ Content-Type: application/json
 | `INVALID_UUID` | Invalid UUID format |
 | `INVALID_CURSOR` | Malformed pagination cursor |
 | `DELTA_EXCEEDS_MAXIMUM` | Increment delta exceeds the counter's max_delta value |
+| `IDEMPOTENCY_KEY_REQUIRED` | V2 mutation is missing the required idempotency key |
+| `INVALID_IDEMPOTENCY_KEY` | Idempotency key is not a valid UUID |
+| `IDEMPOTENCY_KEY_REUSED` | Idempotency key was reused with different request data |
+| `OPERATION_IN_PROGRESS` | The idempotent operation is currently being completed |
+| `COUNTER_OVERFLOW` | The resulting counter value is outside the supported range |
 
 ## Rate Limiting
 

@@ -1,17 +1,20 @@
 package main
 
 import (
+	"context"
 	"counter/internal/cache"
 	"counter/internal/config"
 	"counter/internal/database"
 	"counter/internal/middleware"
 	"counter/internal/migrations"
-	"counter/internal/models"
+	"counter/internal/observability"
 	"counter/internal/router"
-	"context"
+	"counter/internal/service"
+	"counter/internal/store"
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -30,6 +33,7 @@ func main() {
 	// Define CLI flags
 	versionFlag := flag.Bool("version", false, "Print version information")
 	migrateFlag := flag.String("db-migrate", "", "Run database migrations (up or down)")
+	reconcileFlag := flag.Bool("reconcile", false, "Reconcile counters against completed operation history")
 	flag.Parse()
 
 	// Handle version flag
@@ -49,9 +53,13 @@ func main() {
 
 	// Initialize database
 	dbCfg := &database.DBConfig{
-		DatabaseURL:  cfg.DatabaseURL,
-		MaxOpenConns: cfg.DBMaxOpenConns,
-		MaxIdleConns: cfg.DBMaxIdleConns,
+		DatabaseURL:            cfg.DatabaseURL,
+		MaxOpenConns:           cfg.DBMaxOpenConns,
+		MaxIdleConns:           cfg.DBMaxIdleConns,
+		ConnMaxIdleTime:        time.Duration(cfg.DBMaxIdleTime) * time.Second,
+		StatementTimeout:       time.Duration(cfg.DBStatementTimeoutMS) * time.Millisecond,
+		LockTimeout:            time.Duration(cfg.DBLockTimeoutMS) * time.Millisecond,
+		IdleTransactionTimeout: time.Duration(cfg.DBIdleTransactionTimeoutMS) * time.Millisecond,
 	}
 
 	db, err := database.NewDB(dbCfg)
@@ -89,6 +97,54 @@ func main() {
 		}
 	}
 
+	if *reconcileFlag {
+		report, err := service.NewReconciliationService(store.NewCounterStore(db)).Reconcile(context.Background(), 100)
+		if err != nil {
+			log.Fatalf("Reconciliation failed: %v", err)
+		}
+		log.Printf("Reconciliation completed: counters=%d operations=%d mismatches=%d initial_value_violations=%d duration=%s",
+			report.CountersChecked,
+			report.OperationsScanned,
+			report.Mismatches,
+			report.InitialValueViolations,
+			report.CompletedAt.Sub(report.StartedAt),
+		)
+		if report.Mismatches != 0 || report.InitialValueViolations != 0 {
+			log.Fatalf("Reconciliation found inconsistent counter history")
+		}
+		return
+	}
+
+	schemaVersion, err := migrations.VerifySchemaCompatibility(context.Background(), db)
+	if err != nil {
+		log.Fatalf("Database schema is not compatible: %v", err)
+	}
+	health := observability.NewHealthState(migrations.LatestVersion)
+	metrics := observability.NewMetrics()
+
+	cacheTTL := time.Duration(cfg.CounterReadCacheTTLSeconds) * time.Second
+	var counterReadCache service.CounterReadCache
+	var closeCounterReadCache func() error
+	if cfg.CounterReadCacheRedisURL != "" {
+		redisCache, err := cache.NewRedisCounterReadCache(cfg.CounterReadCacheRedisURL, cfg.CounterReadCacheMaxEntries, cacheTTL)
+		if err != nil {
+			log.Fatalf("Failed to initialize counter read cache: %v", err)
+		}
+		counterReadCache = redisCache
+		closeCounterReadCache = redisCache.Close
+		log.Printf("Counter read cache configured: Redis, max_entries=%d ttl=%s", cfg.CounterReadCacheMaxEntries, cacheTTL)
+	} else {
+		memoryCache, err := cache.NewMemoryCounterReadCache(cfg.CounterReadCacheMaxEntries, cacheTTL)
+		if err != nil {
+			log.Fatalf("Failed to initialize in-memory counter read cache: %v", err)
+		}
+		counterReadCache = memoryCache
+		log.Printf("Counter read cache configured: in-memory, max_entries=%d ttl=%s", cfg.CounterReadCacheMaxEntries, cacheTTL)
+	}
+	if closeCounterReadCache != nil {
+		defer closeCounterReadCache()
+	}
+
 	// Initialize middleware
 	corsConfig := &middleware.CORSConfig{
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
@@ -99,6 +155,16 @@ func main() {
 	}
 
 	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRequests, cfg.RateLimitGetMultiplier, cfg.RateLimitWindow)
+	if cfg.RateLimitRedisURL != "" {
+		sharedLimiter, err := middleware.NewRedisRateLimitBackend(cfg.RateLimitRedisURL)
+		if err != nil {
+			log.Printf("Redis rate limit backend configuration invalid; using local limiter")
+		} else {
+			rateLimiter.SetSharedBackend(sharedLimiter)
+			defer rateLimiter.Close()
+			log.Println("Shared Redis rate limiting configured; local fallback remains enabled")
+		}
+	}
 
 	logger := middleware.NewDefaultLogger(cfg.LogLevel)
 
@@ -118,6 +184,7 @@ func main() {
 			Release:          sentryRelease,
 			SampleRate:       cfg.SentrySampleRate,
 			TracesSampleRate: cfg.SentrySampleRate,
+			BeforeSend:       middleware.ScrubSentryEvent,
 		})
 		if err != nil {
 			log.Printf("Sentry initialization failed: %v", err)
@@ -152,75 +219,29 @@ func main() {
 		}
 	}()
 
-	// Initialize cache if enabled
-	var cachedCounter *cache.CachedCounter
-	ctx := context.Background()
-
-		// Helper function to find last index of a byte in a string
-		indexLast := func(s string, sep byte) int {
-			for i := len(s) - 1; i >= 0; i-- {
-				if s[i] == sep {
-					return i
-				}
-			}
-			return -1
-		}
-
-	if cfg.CacheEnabled {
-		log.Printf("Initializing cache (size=%d, workers=%d, queue=%d, ttl=%ds)",
-			cfg.CacheSize, cfg.CacheWorkers, cfg.CacheQueueSize, cfg.CacheTTLSeconds)
-
-		// Create LRU cache
-		lruCache := cache.NewLRUCache(cfg.CacheSize)
-
-		// Create fetch function for cache misses
-		fetchFunc := func(key string) (*models.Counter, error) {
-			// Parse key format: tenant_id:counter_id
-			var tenantID, counterID string
-			if idx := indexLast(key, ':'); idx != -1 {
-				tenantID = key[:idx]
-				counterID = key[idx+1:]
-			} else {
-				return nil, fmt.Errorf("invalid cache key format")
-			}
-
-			// Fetch from database
-			var counter models.Counter
-			err := db.Get(
-				&counter,
-				"SELECT id, tenant_id, label, value, max_delta, created_at, updated_at FROM counters WHERE id = $1 AND tenant_id = $2",
-				counterID, tenantID,
-			)
-			if err != nil {
-				return nil, err
-			}
-			return &counter, nil
-		}
-
-		// Create write function for async writes
-		writeFunc := func(counterID string, delta int64) error {
-			// Async write to database
-			_, err := db.Exec(
-				"UPDATE counters SET value = value + $1, updated_at = NOW() WHERE id = $2",
-				delta, counterID,
-			)
-			return err
-		}
-
-		// Create cached counter instance
-		cachedCounter = cache.NewCachedCounter(lruCache, fetchFunc, writeFunc, cfg.CacheWorkers, cfg.CacheQueueSize)
-		cachedCounter.Start(ctx)
-
-		log.Printf("Cache initialized and started")
-	}
-
 	// Create router
-	var r *router.Router
-	if cfg.CacheEnabled && cachedCounter != nil {
-		r = router.NewCachedRouter(db, cachedCounter, corsConfig, rateLimiter, cfg.APIKey, logger, sentryConfig)
-	} else {
-		r = router.NewRouter(db, corsConfig, rateLimiter, cfg.APIKey, logger, sentryConfig)
-	}
+	r := router.NewRouterWithObservability(
+		db,
+		corsConfig,
+		rateLimiter,
+		cfg.APIKey,
+		cfg.LegacyAPIKeyEnabled,
+		logger,
+		sentryConfig,
+		middleware.RouteTimeouts{
+			Read:     time.Duration(cfg.RequestReadTimeoutSeconds) * time.Second,
+			Mutation: time.Duration(cfg.RequestMutationTimeoutSeconds) * time.Second,
+			Database: time.Duration(cfg.DBTimeoutMS) * time.Millisecond,
+		},
+		cfg.ServerConcurrency,
+		router.OperationalOptions{
+			Health:           health,
+			Metrics:          metrics,
+			CounterReadCache: counterReadCache,
+			Version:          Version,
+			SchemaVersion:    schemaVersion,
+		},
+	)
 
 	// Helper function to find last index of a byte in a string
 
@@ -228,40 +249,48 @@ func main() {
 	server := &fasthttp.Server{
 		Handler:            r.ServeHTTP,
 		Name:               "Counter API",
-		ReadTimeout:        time.Second * 10,
-		WriteTimeout:       time.Second * 10,
-		MaxRequestBodySize: 1 * 1024 * 1024, // 1MB max request body
+		ReadTimeout:        time.Duration(cfg.ServerReadTimeoutSeconds) * time.Second,
+		WriteTimeout:       time.Duration(cfg.ServerWriteTimeoutSeconds) * time.Second,
+		IdleTimeout:        time.Duration(cfg.ServerIdleTimeoutSeconds) * time.Second,
+		Concurrency:        cfg.ServerConcurrency,
+		MaxConnsPerIP:      cfg.ServerMaxConnsPerIP,
+		MaxRequestBodySize: cfg.MaxRequestBodyBytes,
 	}
 
-	// Start server in goroutine
+	addr := fmt.Sprintf("%s:%d", cfg.ServerHost, cfg.ServerPort)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		close(stopCleanup)
+		log.Fatalf("Failed to bind server on %s: %v", addr, err)
+	}
+	health.MarkStarted(schemaVersion)
+	log.Printf("Starting server on %s", addr)
+	serverErrors := make(chan error, 1)
 	go func() {
-		addr := fmt.Sprintf("%s:%d", cfg.ServerHost, cfg.ServerPort)
-		log.Printf("Starting server on %s", addr)
-		if err := server.ListenAndServe(addr); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
-		}
+		serverErrors <- server.Serve(listener)
 	}()
 
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	<-sigChan
-
-	log.Println("Shutting down server...")
-
-	// Shutdown cache first to drain pending writes
-	if cfg.CacheEnabled && cachedCounter != nil {
-		log.Printf("Shutting down cache (waiting up to %d seconds)...", cfg.CacheShutdownWait)
-		cachedCounter.Shutdown()
-		log.Printf("Cache shutdown complete")
+	select {
+	case sig := <-sigChan:
+		log.Printf("Shutting down server after %s...", sig)
+		health.MarkDraining()
+		close(stopCleanup)
+		if err := server.Shutdown(); err != nil {
+			log.Printf("Error during server shutdown: %v", err)
+		}
+		if err := <-serverErrors; err != nil {
+			log.Printf("Server stopped with error: %v", err)
+		}
+		health.MarkStopped()
+		log.Println("Server stopped")
+	case err := <-serverErrors:
+		close(stopCleanup)
+		health.MarkStopped()
+		if err != nil {
+			log.Printf("Server stopped unexpectedly: %v", err)
+		}
 	}
-
-	// Stop cleanup goroutine
-	close(stopCleanup)
-
-	if err := server.Shutdown(); err != nil {
-		log.Printf("Error during server shutdown: %v", err)
-	}
-
-	log.Println("Server stopped")
 }

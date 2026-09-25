@@ -1,8 +1,12 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
+
+	"github.com/lib/pq"
 )
 
 func TestErrorResponse(t *testing.T) {
@@ -36,5 +40,17 @@ func TestErrorResponseJSON(t *testing.T) {
 
 	if len(parsed["errors"]) != 1 {
 		t.Errorf("Expected 1 error in JSON, got %d", len(parsed["errors"]))
+	}
+}
+
+func TestIsUnavailableRecognizesContextAndPostgresCapacityErrors(t *testing.T) {
+	if !isUnavailable(context.DeadlineExceeded) {
+		t.Fatal("context deadline should be treated as temporary unavailability")
+	}
+	if !isUnavailable(fmt.Errorf("query failed: %w", &pq.Error{Code: "53300"})) {
+		t.Fatal("too-many-connections should be treated as temporary unavailability")
+	}
+	if isUnavailable(fmt.Errorf("validation failed")) {
+		t.Fatal("validation errors should not be treated as temporary unavailability")
 	}
 }

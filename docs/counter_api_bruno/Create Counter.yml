@@ -36,9 +36,13 @@ docs: |-
 
   Creates a new counter under the specified tenant.
 
-  **Authentication:** Requires API key via X-Api-Key header
+  **Authentication:** Requires an administrator key or tenant-scoped key with
+  the `counter:create` scope.
 
   **Rate Limit:** 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)
+
+  Counter creation currently remains on the V1 route for compatibility. New
+  counter mutations and reads are documented under the V2 routes.
 
   ## URL Parameters
   - `tenant_id` (UUID, required): The unique identifier of the tenant

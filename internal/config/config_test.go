@@ -11,6 +11,8 @@ func TestLoadDefaults(t *testing.T) {
 		"SERVER_HOST", "SERVER_PORT",
 		"DATABASE_URL",
 		"API_KEY", "RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW",
+		"RATE_LIMIT_REDIS_URL",
+		"COUNTER_READ_CACHE_REDIS_URL", "COUNTER_READ_CACHE_MAX_ENTRIES", "COUNTER_READ_CACHE_TTL_SECONDS",
 	} {
 		os.Unsetenv(env)
 	}
@@ -28,8 +30,8 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("Load() failed with defaults: %v", err)
 	}
 
-	if cfg.ServerHost != "0.0.0.0" {
-		t.Errorf("Expected ServerHost default '0.0.0.0', got '%s'", cfg.ServerHost)
+	if cfg.ServerHost != "127.0.0.1" {
+		t.Errorf("Expected ServerHost default '127.0.0.1', got '%s'", cfg.ServerHost)
 	}
 	if cfg.ServerPort != 8080 {
 		t.Errorf("Expected ServerPort default 8080, got %d", cfg.ServerPort)
@@ -39,6 +41,9 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.RateLimitRequests != 10 {
 		t.Errorf("Expected RateLimitRequests default 10, got %d", cfg.RateLimitRequests)
+	}
+	if cfg.DBTimeoutMS != 2000 || cfg.MaxRequestBodyBytes != 64*1024 {
+		t.Errorf("Expected safe timeout/body defaults, got DBTimeoutMS=%d MaxRequestBodyBytes=%d", cfg.DBTimeoutMS, cfg.MaxRequestBodyBytes)
 	}
 }
 
@@ -68,6 +73,90 @@ func TestLoadFromEnv(t *testing.T) {
 	}
 }
 
+func TestRateLimitRedisURLIsOptional(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("RATE_LIMIT_REDIS_URL", "redis://localhost:6379/0")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed with optional Redis URL: %v", err)
+	}
+	if cfg.RateLimitRedisURL != "redis://localhost:6379/0" {
+		t.Fatalf("RateLimitRedisURL = %q, want configured URL", cfg.RateLimitRedisURL)
+	}
+}
+
+func TestCounterReadCacheConfiguration(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("COUNTER_READ_CACHE_REDIS_URL", "redis://localhost:6379/2")
+	t.Setenv("COUNTER_READ_CACHE_MAX_ENTRIES", "37")
+	t.Setenv("COUNTER_READ_CACHE_TTL_SECONDS", "19")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if cfg.CounterReadCacheRedisURL != "redis://localhost:6379/2" {
+		t.Fatalf("CounterReadCacheRedisURL = %q", cfg.CounterReadCacheRedisURL)
+	}
+	if cfg.CounterReadCacheMaxEntries != 37 {
+		t.Fatalf("CounterReadCacheMaxEntries = %d, want 37", cfg.CounterReadCacheMaxEntries)
+	}
+	if cfg.CounterReadCacheTTLSeconds != 19 {
+		t.Fatalf("CounterReadCacheTTLSeconds = %d, want 19", cfg.CounterReadCacheTTLSeconds)
+	}
+}
+
+func TestCounterReadCacheConfigurationDefaults(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("COUNTER_READ_CACHE_REDIS_URL", "")
+	t.Setenv("COUNTER_READ_CACHE_MAX_ENTRIES", "")
+	t.Setenv("COUNTER_READ_CACHE_TTL_SECONDS", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if cfg.CounterReadCacheMaxEntries != 1000 {
+		t.Fatalf("CounterReadCacheMaxEntries = %d, want 1000", cfg.CounterReadCacheMaxEntries)
+	}
+	if cfg.CounterReadCacheTTLSeconds != 300 {
+		t.Fatalf("CounterReadCacheTTLSeconds = %d, want 300", cfg.CounterReadCacheTTLSeconds)
+	}
+}
+
+func TestCounterReadCacheConfigurationRequiresPositiveLimits(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("COUNTER_READ_CACHE_MAX_ENTRIES", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() succeeded with zero cache capacity, want validation error")
+	}
+
+	t.Setenv("COUNTER_READ_CACHE_MAX_ENTRIES", "10")
+	t.Setenv("COUNTER_READ_CACHE_TTL_SECONDS", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() succeeded with zero cache TTL, want validation error")
+	}
+}
+
+func TestLegacyAPIKeyCanBeDisabled(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("LEGACY_API_KEY_ENABLED", "false")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if cfg.LegacyAPIKeyEnabled {
+		t.Fatal("LEGACY_API_KEY_ENABLED=false should disable the compatibility key")
+	}
+}
+
 func TestValidateRequired(t *testing.T) {
 	requiredVars := []string{
 		"DATABASE_URL", "API_KEY",
@@ -83,120 +172,36 @@ func TestValidateRequired(t *testing.T) {
 	}
 }
 
-func TestCacheDefaults(t *testing.T) {
-	os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
-	os.Setenv("API_KEY", "test-key")
-	defer func() {
-		os.Unsetenv("DATABASE_URL")
-		os.Unsetenv("API_KEY")
-		os.Unsetenv("CACHE_ENABLED")
-		os.Unsetenv("CACHE_SIZE")
-		os.Unsetenv("CACHE_TTL_SECONDS")
-		os.Unsetenv("CACHE_WORKERS")
-		os.Unsetenv("CACHE_QUEUE_SIZE")
-		os.Unsetenv("CACHE_SHUTDOWN_WAIT")
-	}()
+func TestLegacyCacheSettingsAreIgnoredForCompatibility(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("CACHE_ENABLED", "true")
+	t.Setenv("CACHE_SIZE", "0")
+	t.Setenv("CACHE_TTL_SECONDS", "-1")
+	t.Setenv("CACHE_WORKERS", "0")
+	t.Setenv("CACHE_QUEUE_SIZE", "0")
+	t.Setenv("CACHE_SHUTDOWN_WAIT", "0")
 
-	cfg, err := Load()
+	_, err := Load()
 	if err != nil {
-		t.Fatalf("Load() failed: %v", err)
-	}
-
-	if !cfg.CacheEnabled {
-		t.Error("Expected CacheEnabled default true, got false")
-	}
-	if cfg.CacheSize != 1000 {
-		t.Errorf("Expected CacheSize default 1000, got %d", cfg.CacheSize)
-	}
-	if cfg.CacheTTLSeconds != 300 {
-		t.Errorf("Expected CacheTTLSeconds default 300, got %d", cfg.CacheTTLSeconds)
-	}
-	if cfg.CacheWorkers != 2 {
-		t.Errorf("Expected CacheWorkers default 2, got %d", cfg.CacheWorkers)
-	}
-	if cfg.CacheQueueSize != 10000 {
-		t.Errorf("Expected CacheQueueSize default 10000, got %d", cfg.CacheQueueSize)
-	}
-	if cfg.CacheShutdownWait != 5 {
-		t.Errorf("Expected CacheShutdownWait default 5, got %d", cfg.CacheShutdownWait)
+		t.Fatalf("legacy cache settings must not affect Load(): %v", err)
 	}
 }
 
-func TestCacheFromEnv(t *testing.T) {
-	os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
-	os.Setenv("API_KEY", "test-key")
-	os.Setenv("CACHE_ENABLED", "false")
-	os.Setenv("CACHE_SIZE", "500")
-	os.Setenv("CACHE_TTL_SECONDS", "600")
-	os.Setenv("CACHE_WORKERS", "4")
-	os.Setenv("CACHE_QUEUE_SIZE", "20000")
-	os.Setenv("CACHE_SHUTDOWN_WAIT", "10")
-	defer func() {
-		os.Unsetenv("DATABASE_URL")
-		os.Unsetenv("API_KEY")
-		os.Unsetenv("CACHE_ENABLED")
-		os.Unsetenv("CACHE_SIZE")
-		os.Unsetenv("CACHE_TTL_SECONDS")
-		os.Unsetenv("CACHE_WORKERS")
-		os.Unsetenv("CACHE_QUEUE_SIZE")
-		os.Unsetenv("CACHE_SHUTDOWN_WAIT")
-	}()
+func TestLoadRejectsInvalidPoolAndTimeoutSettings(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("DB_MAX_OPEN_CONNS", "2")
+	t.Setenv("DB_MAX_IDLE_CONNS", "3")
 
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() failed: %v", err)
+	if _, err := Load(); err == nil {
+		t.Fatal("expected DB_MAX_IDLE_CONNS greater than DB_MAX_OPEN_CONNS to fail")
 	}
 
-	if cfg.CacheEnabled {
-		t.Error("Expected CacheEnabled false, got true")
-	}
-	if cfg.CacheSize != 500 {
-		t.Errorf("Expected CacheSize 500, got %d", cfg.CacheSize)
-	}
-	if cfg.CacheTTLSeconds != 600 {
-		t.Errorf("Expected CacheTTLSeconds 600, got %d", cfg.CacheTTLSeconds)
-	}
-	if cfg.CacheWorkers != 4 {
-		t.Errorf("Expected CacheWorkers 4, got %d", cfg.CacheWorkers)
-	}
-	if cfg.CacheQueueSize != 20000 {
-		t.Errorf("Expected CacheQueueSize 20000, got %d", cfg.CacheQueueSize)
-	}
-	if cfg.CacheShutdownWait != 10 {
-		t.Errorf("Expected CacheShutdownWait 10, got %d", cfg.CacheShutdownWait)
-	}
-}
-
-func TestCacheValidation(t *testing.T) {
-	tests := []struct {
-		name    string
-		envVar  string
-		value   string
-		wantErr bool
-	}{
-		{"invalid cache size", "CACHE_SIZE", "0", true},
-		{"negative TTL", "CACHE_TTL_SECONDS", "-1", true},
-		{"zero workers", "CACHE_WORKERS", "0", true},
-		{"zero queue size", "CACHE_QUEUE_SIZE", "0", true},
-		{"valid config", "CACHE_SIZE", "100", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
-			os.Setenv("API_KEY", "test-key")
-			os.Setenv(tt.envVar, tt.value)
-			defer func() {
-				os.Unsetenv("DATABASE_URL")
-				os.Unsetenv("API_KEY")
-				os.Unsetenv(tt.envVar)
-			}()
-
-			_, err := Load()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Load() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+	t.Setenv("DB_MAX_IDLE_CONNS", "1")
+	t.Setenv("DB_TIMEOUT_MS", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected zero DB timeout to fail")
 	}
 }
 

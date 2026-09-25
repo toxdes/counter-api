@@ -76,6 +76,67 @@ func TestIncrementCounterHandler(t *testing.T) {
 	}
 }
 
+func TestIncrementCounterIdempotency(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestDB(t, db)
+
+	tenantID := createTestTenant(t, db, "idempotent-blog")
+	counterID := createTestCounter(t, db, tenantID, "likes", 0)
+	handler := IncrementCounterHandler(db)
+	const key = "01912345-6789-7000-8000-000000000003"
+
+	call := func(delta string) models.IncrementResponse {
+		ctx := &fasthttp.RequestCtx{}
+		ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=" + delta)
+		ctx.Request.Header.SetMethod("POST")
+		ctx.Request.Header.Set("Idempotency-Key", key)
+		ctx.SetUserValue("tenant_id", tenantID)
+		ctx.SetUserValue("counter_id", counterID)
+
+		handler(ctx)
+		if ctx.Response.StatusCode() != fasthttp.StatusOK {
+			t.Fatalf("status = %d: %s", ctx.Response.StatusCode(), ctx.Response.Body())
+		}
+		var response models.IncrementResponse
+		if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+			t.Fatalf("decode increment response: %v", err)
+		}
+		return response
+	}
+
+	first := call("5")
+	if first.Value != 5 || first.Delta != 5 || first.Replayed || first.OperationID != key {
+		t.Fatalf("first response = %#v", first)
+	}
+	second := call("5")
+	if second.Value != first.Value || second.OperationID != first.OperationID || !second.Replayed {
+		t.Fatalf("replayed response = %#v, first = %#v", second, first)
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=6")
+	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.Header.Set("Idempotency-Key", key)
+	ctx.SetUserValue("tenant_id", tenantID)
+	ctx.SetUserValue("counter_id", counterID)
+	handler(ctx)
+	if ctx.Response.StatusCode() != fasthttp.StatusConflict {
+		t.Fatalf("reused-key status = %d, want %d: %s", ctx.Response.StatusCode(), fasthttp.StatusConflict, ctx.Response.Body())
+	}
+
+	var value, operationCount int64
+	if err := db.Get(&value, "SELECT value FROM counters WHERE tenant_id = $1 AND id = $2", tenantID, counterID); err != nil {
+		t.Fatalf("read counter value: %v", err)
+	}
+	if err := db.Get(&operationCount, "SELECT COUNT(*) FROM counter_operations WHERE tenant_id = $1 AND counter_id = $2 AND operation_id = $3", tenantID, counterID, key); err != nil {
+		t.Fatalf("count operation rows: %v", err)
+	}
+	if value != 5 || operationCount != 1 {
+		t.Fatalf("stored value/operation count = %d/%d, want 5/1", value, operationCount)
+	}
+}
+
 func TestSetCounterValueHandler(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()

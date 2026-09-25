@@ -1,4 +1,4 @@
-.PHONY: build run test clean migrate-up migrate-down docs version bump bump-minor bump-major help
+.PHONY: build run test test-integration security sbom build-reproducible clean migrate-up migrate-down reconcile docs version bump bump-minor bump-major help
 
 VERSION ?= $(shell cat version.txt 2>/dev/null || echo "dev")
 LDFLAGS = -X 'main.Version=$(VERSION)'
@@ -11,6 +11,23 @@ run: build
 
 test:
 	go test -v -race ./...
+	go vet ./...
+
+test-integration:
+	COUNTER_REQUIRE_POSTGRES=1 go test -v -race ./internal/testutil ./internal/handlers ./internal/router
+
+security:
+	@command -v govulncheck >/dev/null || (echo "govulncheck is required" >&2; exit 1)
+	@command -v gitleaks >/dev/null || (echo "gitleaks is required" >&2; exit 1)
+	govulncheck ./...
+	gitleaks detect --no-banner
+
+sbom:
+	@command -v syft >/dev/null || (echo "syft is required" >&2; exit 1)
+	syft dir:. -o cyclonedx-json=/tmp/counter-sbom.json
+
+build-reproducible: docs
+	CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-buildid= -X 'main.Version=$(VERSION)'" -o counter .
 
 migrate-up:
 	@echo "Running database migrations..."
@@ -20,14 +37,19 @@ migrate-down:
 	@echo "Rolling back database migrations..."
 	./counter --db-migrate=down
 
+reconcile:
+	@echo "Reconciling counters against operation history..."
+	./counter --reconcile
+
 clean:
 	rm -f counter
 	rm -f *.log
 	rm -f internal/handlers/docs.html
 
 docs:
-	@echo "Preparing API documentation..."
-	@sed "s|{{BASE_URL}}|https://counter-api.toxdes.com|g" docs/counter-api.html > internal/handlers/docs.html
+	@echo "Generating and embedding API documentation..."
+	go run ./cmd/docs-generator
+	cp docs/api.html internal/handlers/docs.html
 	@echo "Docs ready - embedded in binary"
 
 version:
@@ -65,8 +87,13 @@ help:
 	@echo "  build        - Build the application with version injection"
 	@echo "  run          - Build and run the application"
 	@echo "  test         - Run tests"
+	@echo "  test-integration - Run PostgreSQL-backed tests (requires PostgreSQL)"
+	@echo "  security     - Run govulncheck and gitleaks"
+	@echo "  sbom         - Generate a CycloneDX SBOM with syft"
+	@echo "  build-reproducible - Build with reproducibility flags"
 	@echo "  migrate-up   - Apply pending migrations"
 	@echo "  migrate-down - Rollback last migration"
+	@echo "  reconcile    - Verify counter values against operation history"
 	@echo "  docs         - Prepare API documentation (embed in binary)"
 	@echo "  version      - Show application version"
 	@echo "  bump         - Bump patch version (1.0.3 → 1.0.4)"

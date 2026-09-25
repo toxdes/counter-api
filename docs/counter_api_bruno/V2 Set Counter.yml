@@ -1,0 +1,46 @@
+info:
+  name: V2 Set Counter
+  type: http
+  seq: 12
+
+http:
+  method: POST
+  url: "{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/set"
+  headers:
+    - name: X-Api-Key
+      value: "{{TENANT_API_KEY}}"
+    - name: Idempotency-Key
+      value: 01912345-6789-7000-8000-000000000004
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {"value": 100}
+  auth: inherit
+
+runtime:
+  variables:
+    - name: tenant_id
+      value: 01912345-6789-7000-8000-000000000001
+    - name: counter_id
+      value: 01912345-6789-7000-8000-000000000002
+
+docs: |-
+  # V2 Set Counter
+
+  Sets a counter to a value and records the adjustment in operation history.
+  Requires `counter:adjust` and a UUID `Idempotency-Key`. Reuse the key only
+  when retrying the same logical request.
+
+  ## Request
+  ```http
+  POST /v2/tenants/{tenant_id}/counters/{counter_id}/set
+  X-API-Key: tenant-scoped-key
+  Idempotency-Key: 01912345-6789-7000-8000-000000000004
+  Content-Type: application/json
+
+  {"value": 100}
+  ```
+
+  See `docs/api-v2.md` for response and error details.
