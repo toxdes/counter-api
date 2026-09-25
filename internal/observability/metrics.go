@@ -2,6 +2,7 @@ package observability
 
 import (
 	"fmt"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -153,6 +154,19 @@ func (m *Metrics) RenderPrometheus(pool PoolMetrics, version string, schemaVersi
 	fmt.Fprintf(&output, "counter_database_pool_wait_total %d\n", pool.WaitCount)
 	output.WriteString("# TYPE counter_database_pool_wait_duration_seconds counter\n")
 	fmt.Fprintf(&output, "counter_database_pool_wait_duration_seconds %g\n", pool.WaitDuration.Seconds())
+
+	var runtimeStats runtime.MemStats
+	runtime.ReadMemStats(&runtimeStats)
+	output.WriteString("# TYPE counter_go_runtime_goroutines gauge\n")
+	fmt.Fprintf(&output, "counter_go_runtime_goroutines %d\n", runtime.NumGoroutine())
+	output.WriteString("# TYPE counter_go_runtime_heap_alloc_bytes gauge\n")
+	fmt.Fprintf(&output, "counter_go_runtime_heap_alloc_bytes %d\n", runtimeStats.HeapAlloc)
+	output.WriteString("# TYPE counter_go_runtime_heap_sys_bytes gauge\n")
+	fmt.Fprintf(&output, "counter_go_runtime_heap_sys_bytes %d\n", runtimeStats.HeapSys)
+	output.WriteString("# TYPE counter_go_runtime_gc_cycles_total counter\n")
+	fmt.Fprintf(&output, "counter_go_runtime_gc_cycles_total %d\n", runtimeStats.NumGC)
+	output.WriteString("# TYPE counter_go_runtime_gc_pause_seconds_total counter\n")
+	fmt.Fprintf(&output, "counter_go_runtime_gc_pause_seconds_total %g\n", float64(runtimeStats.PauseTotalNs)/float64(time.Second))
 
 	output.WriteString("# TYPE counter_build_info gauge\n")
 	fmt.Fprintf(&output, "counter_build_info{version=\"%s\",schema_version=\"%d\"} 1\n", escapeLabel(version), schemaVersion)

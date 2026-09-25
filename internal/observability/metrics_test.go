@@ -31,3 +31,18 @@ func TestRenderPrometheusIncludesBoundedRequestAndPoolMetrics(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderPrometheusIncludesGoRuntimeMetrics(t *testing.T) {
+	output := NewMetrics().RenderPrometheus(PoolMetrics{}, "test", 7)
+	for _, metric := range []string{
+		"counter_go_runtime_goroutines",
+		"counter_go_runtime_heap_alloc_bytes",
+		"counter_go_runtime_heap_sys_bytes",
+		"counter_go_runtime_gc_cycles_total",
+		"counter_go_runtime_gc_pause_seconds_total",
+	} {
+		if !strings.Contains(output, metric) {
+			t.Fatalf("runtime metric %q missing from output:\n%s", metric, output)
+		}
+	}
+}

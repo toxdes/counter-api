@@ -50,12 +50,18 @@ services:
 
   api1:
     <<: *api
+    ports:
+      - "127.0.0.1::8080"
 
   api2:
     <<: *api
+    ports:
+      - "127.0.0.1::8080"
 
   api3:
     <<: *api
+    ports:
+      - "127.0.0.1::8080"
 
   load-balancer:
     image: haproxy:3.2-alpine

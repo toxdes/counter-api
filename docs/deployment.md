@@ -141,11 +141,15 @@ instances, PostgreSQL, and an HAProxy frontend with active `/readyz` checks:
 docker compose -f deploy/scalability/compose.yaml up --build -d
 docker compose -f deploy/scalability/compose.yaml ps
 docker compose -f deploy/scalability/compose.yaml port load-balancer 8080
+docker compose -f deploy/scalability/compose.yaml port api1 8080
+docker compose -f deploy/scalability/compose.yaml port api2 8080
+docker compose -f deploy/scalability/compose.yaml port api3 8080
 ```
 
 Use the loopback address and assigned port from the last command to check
-`/readyz`. The topology uses local-only credentials, publishes only the HAProxy
-port on loopback, and gives each API instance five PostgreSQL connections. Its named
+`/readyz`. The topology uses local-only credentials, binds HAProxy and each
+API replica's diagnostic port to loopback, and gives each API instance five
+PostgreSQL connections. Its named
 database volume remains after `docker compose down`. Stop one API service to
 observe health-check removal, then start it again:
 
@@ -157,6 +161,96 @@ docker compose -f deploy/scalability/compose.yaml up -d api2
 This is a development smoke setup, not a production deployment template.
 `TestIdempotentIncrementCanRetryAcrossRouterReplicas` exercises a retry against
 different router instances using the same PostgreSQL database.
+
+### Repeatable load and soak runs
+
+Run `scripts/scalability_load.py` from a separate machine or container against
+the load-balancer URL. It creates uniquely named benchmark tenants/counters,
+runs V2 increments with idempotency keys, and checks each counter's operation
+history against its stored value. Benchmark records remain in the database, so
+use a dedicated test database that can be reset between runs.
+The runner rejects non-loopback API or metrics targets unless
+`--allow-remote-target` is supplied explicitly.
+
+```bash
+API_KEY="$API_KEY" python3 scripts/scalability_load.py \
+  --base-url http://127.0.0.1:<load-balancer-port> \
+  --profile distributed \
+  --tenants 10 --counters-per-tenant 10 \
+  --requests 10000 --workers 32 --seed 1 \
+  --metrics-url http://127.0.0.1:<api1-port> \
+  --metrics-url http://127.0.0.1:<api2-port> \
+  --metrics-url http://127.0.0.1:<api3-port> \
+  --environment-json /path/to/run-environment.json
+```
+
+Profiles are `distributed`, `hot-tenant`, `hot-counter`, `read-heavy`, and
+`retry-heavy`. Use `--duration-seconds 300` instead of `--requests` for a
+five-minute saturation/soak run. `--seed` makes target selection and the
+read/write mix repeatable. The report records the command, client platform,
+configuration, HTTP status/error counts, throughput, latency percentiles,
+private per-replica `/metrics` samples, and counter/history verification.
+Pass each API replica's loopback base URL with a separate `--metrics-url`; the
+load traffic itself should use the load balancer. `--environment-json` should
+capture API and PostgreSQL replica counts and resource limits, PostgreSQL
+version/settings, dataset notes, and storage type. For example:
+
+```json
+{
+  "api_replicas": 3,
+  "api_limits": {"cpu": "1 vCPU", "memory": "512 MiB"},
+  "postgres": {
+    "version": "17",
+    "max_connections": 100,
+    "settings": {"shared_buffers": "256MB"},
+    "storage": "local SSD"
+  },
+  "dataset_notes": "fresh local test database"
+}
+```
+
+Do not put credentials in this file. The report includes error examples; the
+command line redacts an inline `--api-key`. Use the `by_kind` results to
+separate read and increment latency in mixed runs. Each protected `/metrics`
+sample also contains per-replica goroutine, Go heap, and cumulative GC data;
+the runtime snapshot is collected when `/metrics` is scraped.
+
+The script exits with status 2 if any counter's completed operation history
+does not match the current value or the submitted successful operation IDs.
+It reports HTTP failures separately from correctness, so a run can show
+accepted throughput and errors while confirming the resulting state. For an
+API process interruption, run a duration-based workload while killing and
+restarting one local replica:
+
+```bash
+docker compose -f deploy/scalability/compose.yaml kill api2
+docker compose -f deploy/scalability/compose.yaml up -d api2
+```
+
+Test PostgreSQL failover only in an HA test environment with the database
+operator's failover procedure. Exercise row-lock contention on benchmark
+counters, constrained connection pools, and network delay in an isolated test
+environment, recording the injected condition and its start/end time in the
+environment notes. The application reads counters from its configured writer;
+record replication lag and avoid routing these validation reads to a stale
+replica. Capture lock waits, WAL/checkpoint/I/O, replication lag, and host
+CPU/memory from PostgreSQL and host monitoring alongside the JSON report.
+Repeat the same command and compare tail latency and throughput only when
+correctness passes.
+
+Keep a capacity worksheet with each comparable report. Record average and
+peak operations per second, the hottest counter's share of writes, p95/p99
+latency targets and observed values, operation rows and WAL bytes per
+increment, storage growth, database connection budget, replica count, and
+monthly cost per million accepted increment operations. Use measured rates to
+estimate daily history/WAL/storage growth and identify whether API CPU, writer
+CPU/I/O, connection waits, or row-lock waits reaches its limit first.
+
+Run the tool's unit tests with:
+
+```bash
+python3 -m unittest discover -s scripts -p 'test_scalability_load.py'
+```
 
 To include the optional shared rate-limit backend in the local topology, add
 the Redis override:

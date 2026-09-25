@@ -47,8 +47,9 @@ traffic eligibility and `/livez` for process supervision.
 
 `GET /metrics` is administrator-protected and returns Prometheus text
 including route/status request counts and durations, database pool usage and
-waits, overload/rate-limit/idempotency events, build version, and schema
-version. It must not be exposed directly to the public internet.
+waits, Go goroutine/heap/GC snapshots, overload/rate-limit/idempotency events,
+build version, and schema version. It must not be exposed directly to the public
+internet.
 
 ### Admin Endpoints
 
