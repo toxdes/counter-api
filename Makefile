@@ -47,8 +47,9 @@ clean:
 	rm -f internal/handlers/docs.html
 
 docs:
-	@echo "Preparing API documentation..."
-	@sed "s|{{BASE_URL}}|https://counter-api.toxdes.com|g" docs/counter-api.html > internal/handlers/docs.html
+	@echo "Generating and embedding API documentation..."
+	go run ./cmd/docs-generator
+	cp docs/api.html internal/handlers/docs.html
 	@echo "Docs ready - embedded in binary"
 
 version:

@@ -67,11 +67,25 @@ CORS_MAX_AGE=3600
 LOG_LEVEL=warn
 ```
 
-The API uses PostgreSQL as the sole authoritative counter path. The former
-process-local cache and asynchronous write-behind queue are removed. Existing
-`CACHE_*` environment variables are accepted but ignored with a deprecation
-warning for one compatibility release; remove them from systemd, container,
-and VPS configuration.
+The API uses PostgreSQL as the sole authoritative counter path. V2 individual
+counter GETs use a bounded read-through cache: Redis is selected when
+`COUNTER_READ_CACHE_REDIS_URL` is set; otherwise each API process uses its own
+in-memory LRU. Both backends use `COUNTER_READ_CACHE_MAX_ENTRIES` (default
+`1000`) and `COUNTER_READ_CACHE_TTL_SECONDS` (default `300`). The entry limit is
+global to the configured Redis database in Redis mode and per API process in
+memory mode; keep settings consistent across replicas. Cache misses read from
+PostgreSQL and populate the cache. Successful increments and adjustments
+invalidate the entry after the database transaction commits. Cache failures do
+not fail requests: Redis failures bypass the cache and read PostgreSQL. V1
+counter GETs continue to read PostgreSQL directly.
+
+The in-memory cache is local to each API replica, so a write through another
+replica can leave a cached read stale until its TTL expires. Redis shares entries
+and invalidations across replicas; if invalidation fails, staleness is bounded
+by the TTL. The cache is never used for counter writes, operation history, or
+counter-list queries. Existing `CACHE_*` write-behind settings are still
+accepted but ignored with a deprecation warning; remove them from deployment
+configuration.
 
 `API_KEY` is the legacy administrator/bootstrap credential. It is required for
 tenant creation and credential lifecycle operations. New tenant credentials
@@ -252,8 +266,8 @@ Run the tool's unit tests with:
 python3 -m unittest discover -s scripts -p 'test_scalability_load.py'
 ```
 
-To include the optional shared rate-limit backend in the local topology, add
-the Redis override:
+To include optional shared rate limiting and the shared counter read cache in
+the local topology, add the Redis override:
 
 ```bash
 docker compose -f deploy/scalability/compose.yaml \
@@ -263,11 +277,17 @@ docker compose -f deploy/scalability/compose.yaml \
 ```
 
 Use the assigned loopback port as `RATE_LIMIT_REDIS_TEST_URL` when running
-`TestRedisSharedLimitAcrossIndependentClients`. Without Redis, each API replica
-uses its local bounded limiter. With `RATE_LIMIT_REDIS_URL` configured, replicas
-share rate-limit buckets through Redis. Redis is not used for counter state or
-idempotency; if it cannot be reached, requests fall back to the local limiter
-and the `rate_limit_backend_fallback` metric increases.
+`TestRedisSharedLimitAcrossIndependentClients`. To exercise shared cache reads,
+set `COUNTER_READ_CACHE_TEST_URL` to a dedicated Redis database (for example,
+database 2) before running `TestRedisCounterReadCacheSharedCapacityAndInvalidation`.
+The override configures rate limits on Redis database 0 and counter read
+caching on database 1. Without
+`COUNTER_READ_CACHE_REDIS_URL`, each API replica uses the bounded in-memory
+counter cache. Without `RATE_LIMIT_REDIS_URL`, rate limits remain process-local.
+Redis stores neither authoritative counter state nor idempotency records. If
+the configured read-cache Redis is unavailable, counter reads bypass it and
+load from PostgreSQL; the rate limiter independently falls back to its local
+limiter and increments `rate_limit_backend_fallback`.
 
 ### 5. Backups and restore verification
 
@@ -443,6 +463,46 @@ sudo systemctl enable counter
 sudo systemctl start counter
 sudo systemctl status counter
 ```
+
+### Updating an existing systemd deployment
+
+V1 routes remain available, so replacing the binary does not require an
+immediate consumer migration to V2. New V2 routes are additive. Before an
+upgrade, check the database schema version and take a backup. This binary
+requires schema version 7; it refuses to start if the database is behind or
+ahead. Check the deployed schema before upgrading. If needed, run the new
+binary's `--db-migrate=up` with the same `DATABASE_URL` and `API_KEY` as the
+service before starting it; for a local `.env`, run it from the service's
+working directory. The read-cache change itself adds no database migration.
+
+For a single VPS, build the binary for the server architecture, upload it to a
+temporary path, stop the service, replace the executable, then start and check
+it. For example:
+
+```bash
+sudo systemctl stop counter
+# If required, apply migrations using the new binary and the service environment.
+# Example when /opt/counter/.env is loaded by godotenv:
+cd /opt/counter && sudo -u counterapi /tmp/counter-new --db-migrate=up
+sudo install -m 0755 /tmp/counter-new /opt/counter/counter
+sudo systemctl start counter
+sudo systemctl status counter
+sudo journalctl -u counter -n 100 --no-pager
+curl --fail http://127.0.0.1:8080/readyz
+```
+
+Use a tested backup and a deliberate rollback plan; do not run `--db-migrate=down`
+as an automatic binary rollback. The additive migration state may not be
+compatible with an older binary, which also enforces an exact schema version.
+
+When Nginx already proxies to `127.0.0.1:8080`, no Nginx change is needed for
+V2 or for the read cache. The application defaults to `SERVER_HOST=127.0.0.1`;
+there is no trusted-proxy environment variable. For Cloudflare, Nginx must
+trust Cloudflare's published source ranges for `CF-Connecting-IP` and overwrite
+forwarded client-IP headers with the resolved `$remote_addr`. The checked-in
+[`nginx.conf`](../nginx.conf) shows that setup. If your current Nginx config
+already does this, keep it as-is; otherwise rate limiting may identify
+Cloudflare's proxy addresses instead of individual visitors.
 
 ### Production with Docker
 

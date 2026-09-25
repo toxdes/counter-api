@@ -44,6 +44,12 @@ type Config struct {
 	RateLimitCleanup       int
 	RateLimitRedisURL      string
 
+	// Counter read cache. Redis is selected when a URL is configured; otherwise
+	// the API uses a bounded per-process in-memory cache.
+	CounterReadCacheRedisURL   string
+	CounterReadCacheMaxEntries int
+	CounterReadCacheTTLSeconds int
+
 	// CORS
 	CORSAllowedOrigins   string
 	CORSAllowedMethods   string
@@ -101,6 +107,10 @@ func Load() (*Config, error) {
 		RateLimitCleanup:       getEnvInt("RATE_LIMIT_CLEANUP", 300),
 		RateLimitRedisURL:      getEnv("RATE_LIMIT_REDIS_URL", ""),
 
+		CounterReadCacheRedisURL:   getEnv("COUNTER_READ_CACHE_REDIS_URL", ""),
+		CounterReadCacheMaxEntries: getEnvInt("COUNTER_READ_CACHE_MAX_ENTRIES", 1000),
+		CounterReadCacheTTLSeconds: getEnvInt("COUNTER_READ_CACHE_TTL_SECONDS", 300),
+
 		CORSAllowedOrigins:   getEnv("CORS_ALLOWED_ORIGINS", "*"),
 		CORSAllowedMethods:   getEnv("CORS_ALLOWED_METHODS", "GET,POST,OPTIONS"),
 		CORSAllowedHeaders:   getEnv("CORS_ALLOWED_HEADERS", "Content-Type,Authorization,X-Request-ID,X-API-Key,Idempotency-Key"),
@@ -157,6 +167,12 @@ func Load() (*Config, error) {
 	}
 	if cfg.RateLimitCleanup < 1 {
 		return nil, fmt.Errorf("RATE_LIMIT_CLEANUP must be at least 1 second")
+	}
+	if cfg.CounterReadCacheMaxEntries < 1 {
+		return nil, fmt.Errorf("COUNTER_READ_CACHE_MAX_ENTRIES must be at least 1")
+	}
+	if cfg.CounterReadCacheTTLSeconds < 1 {
+		return nil, fmt.Errorf("COUNTER_READ_CACHE_TTL_SECONDS must be at least 1 second")
 	}
 	if cfg.ServerPort < 1 || cfg.ServerPort > 65535 {
 		return nil, fmt.Errorf("SERVER_PORT must be between 1 and 65535")

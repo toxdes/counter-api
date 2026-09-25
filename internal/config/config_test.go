@@ -12,6 +12,7 @@ func TestLoadDefaults(t *testing.T) {
 		"DATABASE_URL",
 		"API_KEY", "RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW",
 		"RATE_LIMIT_REDIS_URL",
+		"COUNTER_READ_CACHE_REDIS_URL", "COUNTER_READ_CACHE_MAX_ENTRIES", "COUNTER_READ_CACHE_TTL_SECONDS",
 	} {
 		os.Unsetenv(env)
 	}
@@ -83,6 +84,62 @@ func TestRateLimitRedisURLIsOptional(t *testing.T) {
 	}
 	if cfg.RateLimitRedisURL != "redis://localhost:6379/0" {
 		t.Fatalf("RateLimitRedisURL = %q, want configured URL", cfg.RateLimitRedisURL)
+	}
+}
+
+func TestCounterReadCacheConfiguration(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("COUNTER_READ_CACHE_REDIS_URL", "redis://localhost:6379/2")
+	t.Setenv("COUNTER_READ_CACHE_MAX_ENTRIES", "37")
+	t.Setenv("COUNTER_READ_CACHE_TTL_SECONDS", "19")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if cfg.CounterReadCacheRedisURL != "redis://localhost:6379/2" {
+		t.Fatalf("CounterReadCacheRedisURL = %q", cfg.CounterReadCacheRedisURL)
+	}
+	if cfg.CounterReadCacheMaxEntries != 37 {
+		t.Fatalf("CounterReadCacheMaxEntries = %d, want 37", cfg.CounterReadCacheMaxEntries)
+	}
+	if cfg.CounterReadCacheTTLSeconds != 19 {
+		t.Fatalf("CounterReadCacheTTLSeconds = %d, want 19", cfg.CounterReadCacheTTLSeconds)
+	}
+}
+
+func TestCounterReadCacheConfigurationDefaults(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("COUNTER_READ_CACHE_REDIS_URL", "")
+	t.Setenv("COUNTER_READ_CACHE_MAX_ENTRIES", "")
+	t.Setenv("COUNTER_READ_CACHE_TTL_SECONDS", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if cfg.CounterReadCacheMaxEntries != 1000 {
+		t.Fatalf("CounterReadCacheMaxEntries = %d, want 1000", cfg.CounterReadCacheMaxEntries)
+	}
+	if cfg.CounterReadCacheTTLSeconds != 300 {
+		t.Fatalf("CounterReadCacheTTLSeconds = %d, want 300", cfg.CounterReadCacheTTLSeconds)
+	}
+}
+
+func TestCounterReadCacheConfigurationRequiresPositiveLimits(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("COUNTER_READ_CACHE_MAX_ENTRIES", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() succeeded with zero cache capacity, want validation error")
+	}
+
+	t.Setenv("COUNTER_READ_CACHE_MAX_ENTRIES", "10")
+	t.Setenv("COUNTER_READ_CACHE_TTL_SECONDS", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() succeeded with zero cache TTL, want validation error")
 	}
 }
 

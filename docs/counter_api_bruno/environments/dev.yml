@@ -2,5 +2,7 @@ name: dev
 variables:
   - secret: true
     name: API_KEY
+  - secret: true
+    name: TENANT_API_KEY
   - name: BASE_URL
     value: http://localhost:8080

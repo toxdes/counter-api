@@ -31,9 +31,10 @@ docs: |-
 
   Increments a counter value by a specified delta amount. Useful for tracking events like page views, clicks, or any countable metric.
 
-  **Authentication:** None required (public endpoint)
+  **Authentication:** V1 keeps its existing route policy. New clients should
+  use V2 with a `counter:increment` scoped key and required idempotency key.
 
-  **Rate Limit:** 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)
+  **Rate Limit:** Controlled by the configured API rate limits.
 
   ## URL Parameters
   - `tenant_id` (UUID, required): The unique identifier of the tenant

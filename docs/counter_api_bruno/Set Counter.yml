@@ -37,7 +37,8 @@ settings:
 docs: |-
   # Set Counter Value
 
-  Sets a counter to a specific value. Useful for resetting counters or setting them to a known state.
+  Legacy V1 set route. New clients should use the V2 set route, which requires
+  an idempotency key and records the adjustment in operation history.
 
   **Authentication:** Requires API key via X-Api-Key header
 

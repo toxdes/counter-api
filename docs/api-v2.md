@@ -30,6 +30,44 @@ scopes. Supported scopes are `tenant:read`, `counter:read`,
 `counter:create`, `counter:increment`, `counter:adjust`, and
 `counter:history`.
 
+Creating a tenant or managing credentials requires an administrator key. A
+tenant credential can create counters only when explicitly granted
+`counter:create`; that endpoint is currently the compatible V1 route
+`POST /tenants/{tenant_id}/counters`. The default tenant credential scopes do
+not include `counter:create` or `counter:adjust`.
+
+## Get Counter
+
+Returns the current counter representation. Requires a tenant-scoped key with
+the `counter:read` scope.
+
+```http
+GET /v2/tenants/{tenant_id}/counters/{counter_id}
+X-API-Key: tenant-scoped-key
+```
+
+The response uses the same fields as the V1 Get Counter response. V2 reads may
+be served from a bounded read-through cache: a cache miss loads from PostgreSQL,
+and successful mutations invalidate the cached entry after commit. With the
+in-memory backend, a write handled by another API replica may not be visible
+until the configured TTL expires. Configure the cache backend, capacity, and
+TTL as described in the deployment guide. Cache failures fall back to
+PostgreSQL.
+
+### Response
+
+```json
+{
+  "counter_id": "01912345-6789-7000-8000-000000000002",
+  "tenant_id": "01912345-6789-7000-8000-000000000001",
+  "label": "daily_steps_2026-09-25",
+  "value": 8421,
+  "max_delta": 100000,
+  "created_at": "2026-09-25T08:00:00Z",
+  "updated_at": "2026-09-25T12:01:00Z"
+}
+```
+
 ## Increment Counter
 
 Increments a counter by a positive delta.
@@ -166,12 +204,14 @@ X-API-Key: administrator-key
 Content-Type: application/json
 
 {
-  "scopes": ["counter:read", "counter:increment", "counter:history"]
+  "scopes": ["counter:read", "counter:create", "counter:increment", "counter:adjust", "counter:history"]
 }
 ```
 
 The `scopes` field is optional and defaults to read, increment, and history.
-An optional `expires_at` timestamp can limit credential lifetime.
+Include `counter:create` if this key should create counters through the V1
+counter-creation route. An optional `expires_at` timestamp can limit credential
+lifetime.
 
 ### Rotate
 
@@ -210,6 +250,42 @@ Content-Type: application/json
 Administrator credentials are not tenant-scoped and inherit all supported
 action scopes. The legacy key should remain enabled until this credential has
 been distributed to administrators and verified.
+
+## Migrating from V1
+
+V1 is not removed or changed by enabling V2. Existing unversioned clients can
+continue using their current routes while clients migrate independently.
+
+| V1 route | V2 route or migration action |
+|---|---|
+| `POST /tenants` | Keep using it with an administrator key; tenant creation has no V2 replacement yet. |
+| `POST /tenants/{tenant_id}/counters` | Keep using it; grant a tenant key `counter:create` when delegated counter creation is needed. |
+| `GET /tenants/{tenant_id}/counters/{counter_id}` | `GET /v2/tenants/{tenant_id}/counters/{counter_id}` with `counter:read`. |
+| `POST /tenants/{tenant_id}/counters/{counter_id}/inc` | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/inc` with `counter:increment` and a required `Idempotency-Key`. |
+| `POST /tenants/{tenant_id}/counters/{counter_id}/set` | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/set` with `counter:adjust` and a required `Idempotency-Key`. |
+| No V1 equivalent | `GET /v2/tenants/{tenant_id}/counters/{counter_id}/operations` with `counter:history`. |
+
+The recommended migration sequence is:
+
+1. Keep the legacy administrator key enabled and use it to create an
+   administrator credential or tenant-scoped credentials.
+2. Grant each tenant credential only the scopes it needs. Include
+   `counter:create` or `counter:adjust` explicitly; they are not default
+   scopes.
+3. Migrate reads first, then mutations. For every V2 mutation, generate one
+   UUID idempotency key per logical operation and reuse it for retries.
+4. Verify operation history and replay behavior in a staging environment,
+   then switch production consumers gradually.
+5. After all protected clients use managed credentials, optionally set
+   `LEGACY_API_KEY_ENABLED=false`. This disables the environment key but does
+   not disable V1 routes.
+
+V1 mutations without an idempotency key remain supported, but retries can
+apply more than once. V2 mutations return the committed operation result and
+replay the original result when the same key and request are retried. V2
+counter reads may be served by the configured bounded cache; with the
+in-memory backend, another replica's write may remain unseen until cache
+invalidation reaches that process or the TTL expires.
 
 ## Reads and Consistency
 

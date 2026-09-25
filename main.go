@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"counter/internal/cache"
 	"counter/internal/config"
 	"counter/internal/database"
 	"counter/internal/middleware"
@@ -121,6 +122,29 @@ func main() {
 	health := observability.NewHealthState(migrations.LatestVersion)
 	metrics := observability.NewMetrics()
 
+	cacheTTL := time.Duration(cfg.CounterReadCacheTTLSeconds) * time.Second
+	var counterReadCache service.CounterReadCache
+	var closeCounterReadCache func() error
+	if cfg.CounterReadCacheRedisURL != "" {
+		redisCache, err := cache.NewRedisCounterReadCache(cfg.CounterReadCacheRedisURL, cfg.CounterReadCacheMaxEntries, cacheTTL)
+		if err != nil {
+			log.Fatalf("Failed to initialize counter read cache: %v", err)
+		}
+		counterReadCache = redisCache
+		closeCounterReadCache = redisCache.Close
+		log.Printf("Counter read cache configured: Redis, max_entries=%d ttl=%s", cfg.CounterReadCacheMaxEntries, cacheTTL)
+	} else {
+		memoryCache, err := cache.NewMemoryCounterReadCache(cfg.CounterReadCacheMaxEntries, cacheTTL)
+		if err != nil {
+			log.Fatalf("Failed to initialize in-memory counter read cache: %v", err)
+		}
+		counterReadCache = memoryCache
+		log.Printf("Counter read cache configured: in-memory, max_entries=%d ttl=%s", cfg.CounterReadCacheMaxEntries, cacheTTL)
+	}
+	if closeCounterReadCache != nil {
+		defer closeCounterReadCache()
+	}
+
 	// Initialize middleware
 	corsConfig := &middleware.CORSConfig{
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
@@ -211,10 +235,11 @@ func main() {
 		},
 		cfg.ServerConcurrency,
 		router.OperationalOptions{
-			Health:        health,
-			Metrics:       metrics,
-			Version:       Version,
-			SchemaVersion: schemaVersion,
+			Health:           health,
+			Metrics:          metrics,
+			CounterReadCache: counterReadCache,
+			Version:          Version,
+			SchemaVersion:    schemaVersion,
 		},
 	)
 

@@ -34,6 +34,7 @@ var routeSurface = []string{
 	"POST /tenants/<tenant_id>/counters/<counter_id>/set",
 	"POST /v2/tenants/<tenant_id>/counters/<counter_id>/inc",
 	"POST /v2/tenants/<tenant_id>/counters/<counter_id>/set",
+	"GET /v2/tenants/<tenant_id>/counters/<counter_id>",
 	"GET /v2/tenants/<tenant_id>/counters/<counter_id>/operations",
 	"POST /v2/tenants/<tenant_id>/credentials",
 	"POST /v2/tenants/<tenant_id>/credentials/<credential_id>/rotate",
@@ -93,10 +94,11 @@ func NewRouterWithTimeouts(db *database.DB, corsConfig *middleware.CORSConfig, r
 }
 
 type OperationalOptions struct {
-	Health        *observability.HealthState
-	Metrics       *observability.Metrics
-	Version       string
-	SchemaVersion int64
+	Health           *observability.HealthState
+	Metrics          *observability.Metrics
+	CounterReadCache service.CounterReadCache
+	Version          string
+	SchemaVersion    int64
 }
 
 func NewRouterWithObservability(db *database.DB, corsConfig *middleware.CORSConfig, rateLimiter *middleware.RateLimiter, apiKey string, legacyAPIKeyEnabled bool, logger *middleware.Logger, sentryConfig *middleware.SentryConfig, timeouts middleware.RouteTimeouts, maxConcurrency int, options OperationalOptions) *Router {
@@ -109,11 +111,12 @@ func NewRouterWithObservability(db *database.DB, corsConfig *middleware.CORSConf
 	r := routing.New()
 	tenantService := service.NewTenantService(store.NewTenantStore(db))
 	counterStore := store.NewCounterStore(db)
-	counterService := service.NewCounterService(counterStore)
+	counterService := service.NewCounterServiceWithReadCache(counterStore, options.CounterReadCache)
+	v1CounterReadService := service.NewCounterService(counterStore)
 	historyService := service.NewOperationHistoryService(counterStore)
 	credentialStore := store.NewCredentialStore(db)
 	credentialService := service.NewCredentialService(credentialStore)
-	registerRoutes(r, tenantService, counterService, historyService, credentialService, options.Health, options.Metrics, db, options.Version, options.SchemaVersion)
+	registerRoutes(r, tenantService, counterService, v1CounterReadService, historyService, credentialService, options.Health, options.Metrics, db, options.Version, options.SchemaVersion)
 
 	handler := fasthttp.RequestHandler(r.HandleRequest)
 	handler = middleware.RateLimitWithMetrics(rateLimiter, options.Metrics)(handler)
@@ -135,7 +138,7 @@ func NewRouterWithObservability(db *database.DB, corsConfig *middleware.CORSConf
 	return &Router{RequestHandler: handler}
 }
 
-func registerRoutes(r *routing.Router, tenantService service.TenantService, counterService service.CounterService, historyService service.OperationHistoryService, credentialService service.CredentialService, health *observability.HealthState, metrics *observability.Metrics, db *database.DB, version string, schemaVersion int64) {
+func registerRoutes(r *routing.Router, tenantService service.TenantService, counterService, v1CounterReadService service.CounterService, historyService service.OperationHistoryService, credentialService service.CredentialService, health *observability.HealthState, metrics *observability.Metrics, db *database.DB, version string, schemaVersion int64) {
 	r.Get("/", toHandler(handlers.DocsHandler))
 	r.Get("/livez", toHandler(handlers.LivenessHandler(health)))
 	r.Get("/readyz", toHandler(handlers.ReadinessHandler(health, db)))
@@ -146,7 +149,7 @@ func registerRoutes(r *routing.Router, tenantService service.TenantService, coun
 	r.Get("/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterRead)(toHandler(handlers.ListCountersServiceHandler(counterService))))
 	r.Post("/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterCreate)(toHandler(handlers.CreateCounterServiceHandler(counterService))))
 
-	getCounter := handlers.GetCounterServiceHandler(counterService)
+	getCounter := handlers.GetCounterServiceHandler(v1CounterReadService)
 	incrementCounter := handlers.IncrementCounterServiceHandler(counterService)
 	setCounter := handlers.SetCounterServiceHandler(counterService)
 	r.Get("/tenants/<tenant_id>/counters/<counter_id>", toHandler(getCounter))
@@ -155,6 +158,7 @@ func registerRoutes(r *routing.Router, tenantService service.TenantService, coun
 
 	v2IncrementCounter := handlers.IncrementCounterServiceHandlerVersioned(counterService, contract.V2)
 	v2SetCounter := handlers.SetCounterServiceHandlerVersioned(counterService, contract.V2)
+	r.Get("/v2/tenants/<tenant_id>/counters/<counter_id>", middleware.RequireScopesRouting(middleware.ScopeCounterRead)(toHandler(handlers.GetCounterServiceHandler(counterService))))
 	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/inc", middleware.RequireScopesRouting(middleware.ScopeCounterIncrement)(toHandler(v2IncrementCounter)))
 	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/set", middleware.RequireScopesRouting(middleware.ScopeCounterAdjust)(toHandler(v2SetCounter)))
 	r.Get("/v2/tenants/<tenant_id>/counters/<counter_id>/operations", middleware.RequireScopesRouting(middleware.ScopeCounterHistory)(toHandler(handlers.OperationHistoryServiceHandler(historyService))))

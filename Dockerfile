@@ -5,7 +5,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN sed "s|{{BASE_URL}}|https://counter-api.toxdes.com|g" docs/counter-api.html > internal/handlers/docs.html \
+RUN go run ./cmd/docs-generator \
+    && cp docs/api.html internal/handlers/docs.html \
     && CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-buildid=" -o /out/counter .
 
 FROM alpine:3.22

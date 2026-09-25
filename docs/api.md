@@ -10,13 +10,15 @@ http://localhost:8080
 
 ### Authentication
 
-Admin endpoints require an API key in the `X-API-Key` header:
+Protected endpoints require an API key in the `X-API-Key` header. For new
+clients, prefer tenant-scoped credentials and the V2 contract:
 
 ```
 X-API-Key: your-secret-api-key-here
 ```
 
-Public endpoints do not require authentication but are rate-limited.
+Some legacy V1 endpoints retain their existing public policy; see each endpoint
+below. V2 endpoints require a credential with the documented tenant scope.
 
 ## API Versioning and Compatibility
 
@@ -108,7 +110,7 @@ Creates a new counter under a tenant.
 **Request**
 
 ```http
-POST /tenants/{tenant_id}
+POST /tenants/{tenant_id}/counters
 X-API-Key: your-api-key
 Content-Type: application/json
 
@@ -118,6 +120,9 @@ Content-Type: application/json
   "max_delta": 100
 }
 ```
+
+**Authentication:** Administrator key or a tenant-scoped key with
+`counter:create`.
 
 **Parameters**
 
@@ -181,7 +186,7 @@ Content-Type: application/json
 
 `next_cursor` is `null` when all counters have been returned.
 
-#### Set Counter Value
+#### Set Counter Value (V1)
 
 Sets a counter to a specific value. Requires API key.
 
@@ -190,7 +195,7 @@ Sets a counter to a specific value. Requires API key.
 ```http
 POST /tenants/{tenant_id}/counters/{counter_id}/set
 X-API-Key: your-api-key
-Idempotency-Key: 01912345-6789-7000-8000-000000000004 (optional)
+Idempotency-Key: 01912345-6789-7000-8000-000000000004 (optional for V1)
 Content-Type: application/json
 
 {
@@ -249,7 +254,7 @@ Retrieves a counter by ID.
 **Request**
 
 ```http
-GET /tenants/{tenant_id}/{counter_id}
+GET /tenants/{tenant_id}/counters/{counter_id}
 ```
 
 **Response**

@@ -40,6 +40,14 @@ type CounterRepository interface {
 	SetCounterValueWithOperation(context.Context, string, string, int64, string, []byte, time.Time) (store.MutationResult, error)
 }
 
+// CounterReadCache is a best-effort cache for individual counter reads.
+// Implementations must not be treated as authoritative storage.
+type CounterReadCache interface {
+	Get(context.Context, string, string) (*models.Counter, bool, error)
+	Set(context.Context, *models.Counter) error
+	Delete(context.Context, string, string) error
+}
+
 // CounterService contains counter read and creation use cases independent of
 // HTTP and SQL.
 type CounterService interface {
@@ -64,13 +72,19 @@ type AttributableCounterService interface {
 
 type counterService struct {
 	repository CounterRepository
+	readCache  CounterReadCache
 	now        func() time.Time
 	newID      func() string
 }
 
 func NewCounterService(repository CounterRepository) CounterService {
+	return NewCounterServiceWithReadCache(repository, nil)
+}
+
+func NewCounterServiceWithReadCache(repository CounterRepository, readCache CounterReadCache) CounterService {
 	return &counterService{
 		repository: repository,
+		readCache:  readCache,
 		now:        func() time.Time { return time.Now().UTC() },
 		newID:      func() string { return uuid.NewString() },
 	}
@@ -112,9 +126,17 @@ func (s *counterService) Create(ctx context.Context, tenantID string, request mo
 }
 
 func (s *counterService) Get(ctx context.Context, tenantID, counterID string) (*models.Counter, error) {
+	if s.readCache != nil {
+		if counter, found, err := s.readCache.Get(ctx, tenantID, counterID); err == nil && found && counter != nil {
+			return counter, nil
+		}
+	}
 	counter, err := s.repository.GetCounter(ctx, tenantID, counterID)
 	if errors.Is(err, store.ErrCounterNotFound) {
 		return nil, ErrCounterNotFound
+	}
+	if err == nil && counter != nil && s.readCache != nil {
+		_ = s.readCache.Set(ctx, counter)
 	}
 	return counter, err
 }
@@ -182,6 +204,7 @@ func (s *counterService) incrementWithActor(ctx context.Context, tenantID, count
 	if err != nil {
 		return nil, err
 	}
+	s.invalidateReadCache(ctx, tenantID, counterID)
 	return &CounterMutationResult{
 		OperationID: result.OperationID,
 		CounterID:   counterID,
@@ -230,6 +253,7 @@ func (s *counterService) setWithActor(ctx context.Context, tenantID, counterID s
 	if err != nil {
 		return nil, err
 	}
+	s.invalidateReadCache(ctx, tenantID, counterID)
 	return &CounterMutationResult{
 		OperationID: result.OperationID,
 		CounterID:   counterID,
@@ -238,6 +262,14 @@ func (s *counterService) setWithActor(ctx context.Context, tenantID, counterID s
 		UpdatedAt:   result.UpdatedAt,
 		Replayed:    result.Replayed,
 	}, nil
+}
+
+func (s *counterService) invalidateReadCache(ctx context.Context, tenantID, counterID string) {
+	if s.readCache != nil {
+		// The database mutation has already committed. Cache invalidation is
+		// best effort; a failed invalidation is bounded by the cache TTL.
+		_ = s.readCache.Delete(ctx, tenantID, counterID)
+	}
 }
 
 func (s *counterService) incrementRepository(ctx context.Context, tenantID, counterID string, delta int64, operationID string, requestHash []byte, actorID string, now time.Time) (store.MutationResult, error) {

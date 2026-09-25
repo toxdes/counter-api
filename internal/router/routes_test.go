@@ -17,6 +17,7 @@ func TestSharedRouteSurfaceIsComplete(t *testing.T) {
 		"POST /tenants/<tenant_id>/counters/<counter_id>/set",
 		"POST /v2/tenants/<tenant_id>/counters/<counter_id>/inc",
 		"POST /v2/tenants/<tenant_id>/counters/<counter_id>/set",
+		"GET /v2/tenants/<tenant_id>/counters/<counter_id>",
 		"GET /v2/tenants/<tenant_id>/counters/<counter_id>/operations",
 		"POST /v2/tenants/<tenant_id>/credentials",
 		"POST /v2/tenants/<tenant_id>/credentials/<credential_id>/rotate",
