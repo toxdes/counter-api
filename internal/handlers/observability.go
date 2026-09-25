@@ -10,6 +10,13 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// DatabasePinger is the database capability required by readiness checks.
+// Keeping this boundary small allows failover behavior to be tested without
+// requiring a concrete database pool in the handler tests.
+type DatabasePinger interface {
+	PingContext(context.Context) error
+}
+
 func LivenessHandler(state *observability.HealthState) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		if state == nil || !state.Live() {
@@ -20,7 +27,7 @@ func LivenessHandler(state *observability.HealthState) fasthttp.RequestHandler {
 	}
 }
 
-func ReadinessHandler(state *observability.HealthState, db *database.DB) fasthttp.RequestHandler {
+func ReadinessHandler(state *observability.HealthState, db DatabasePinger) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		requestContext, _ := middleware.RequestContextFromRequest(ctx)
 		checkContext, cancel := context.WithTimeout(requestContext, time.Second)

@@ -201,6 +201,47 @@ The restore is not considered successful unless reconciliation reports zero
 mismatches and zero initial-value violations. Test both backup freshness and
 restore completion alerts.
 
+### PostgreSQL high availability and failover
+
+The application supports both a single PostgreSQL instance and an HA
+PostgreSQL deployment. Keep `DATABASE_URL` pointed at the logical writer
+endpoint. For a managed service, this is the provider's writer endpoint; for a
+self-managed deployment, it is the endpoint owned by the failover manager or
+database proxy. Do not configure API replicas with a static hostname for an
+individual primary.
+
+An HA deployment should provide a primary and standby in separate failure
+domains, automated promotion with fencing, and a tested writer endpoint. Use
+synchronous or quorum replication when acknowledged writes must have an RPO
+near zero; use asynchronous replication only when the documented replication
+lag and possible loss window are acceptable. Replicas are not backups.
+
+Keep counter mutations and read-after-write requests on the writer. Add read
+replicas only for explicitly stale-tolerant reads, with separate routing and
+monitoring. The API does not perform leader election or select database nodes.
+Its `/readyz` check pings the configured writer and should remove an API
+instance from load-balancer traffic when that writer is unavailable.
+
+Use separate database roles for runtime traffic and migrations. The runtime
+role should have only the required application DML permissions; the migration
+job should use a separately managed credential with schema-change privileges.
+Require TLS for database connections outside a trusted local network.
+
+Failover validation must be exercised independently from backup restore:
+
+1. Run retry-heavy increments against the API while failing the primary.
+2. Confirm `/readyz` removes affected API paths and the writer endpoint is
+   redirected to the promoted standby.
+3. Retry failed mutations with the same V2 idempotency keys; do not blindly
+   retry an unknown transaction outcome with a new key.
+4. Measure time to recovery and actual data loss, then compare them with the
+   declared RTO and RPO.
+5. Run reconciliation after failover and after a restored-backup exercise.
+
+Reset or recycle stale database connections as required by the managed service
+or failover proxy. Keep the total `DB_MAX_OPEN_CONNS` budget across all API
+replicas below the writer's safe capacity.
+
 ### 6. Release and supply-chain checks
 
 Use a current patched Go toolchain for releases. The repository provides
@@ -353,6 +394,9 @@ Keep the default `127.0.0.1` for a host-level deployment behind nginx.
 - [ ] Configure log level to WARN or ERROR
 - [ ] Set up log aggregation (e.g., journald, cloudwatch)
 - [ ] Configure database backups
+- [ ] If HA is required, configure managed PostgreSQL or an owned failover manager
+- [ ] Declare and test PostgreSQL RPO/RTO
+- [ ] Monitor replication lag, WAL retention, failover state, and writer connectivity
 - [ ] Set up monitoring for connection pool usage
 - [ ] Configure reverse proxy (nginx) for HTTPS
 - [ ] Set up process monitoring (systemd, supervisord)
@@ -366,6 +410,7 @@ Keep the default `127.0.0.1` for a host-level deployment behind nginx.
 - Rate limit violations
 - Error rates by endpoint
 - Memory and CPU usage
+- PostgreSQL replication lag, WAL retention, replay state, and failover events
 
 ### Log Aggregation
 

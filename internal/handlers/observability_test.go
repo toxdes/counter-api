@@ -1,11 +1,18 @@
 package handlers
 
 import (
+	"context"
 	"counter/internal/observability"
 	"testing"
 
 	"github.com/valyala/fasthttp"
 )
+
+type unavailableDatabase struct{}
+
+func (unavailableDatabase) PingContext(context.Context) error {
+	return context.DeadlineExceeded
+}
 
 func TestLivenessAndReadinessHandlers(t *testing.T) {
 	state := observability.NewHealthState(7)
@@ -24,6 +31,20 @@ func TestLivenessAndReadinessHandlers(t *testing.T) {
 	ready(readyContext)
 	if readyContext.Response.StatusCode() != fasthttp.StatusServiceUnavailable {
 		t.Fatalf("unstarted readiness status = %d, want %d", readyContext.Response.StatusCode(), fasthttp.StatusServiceUnavailable)
+	}
+}
+
+func TestReadinessRemovesReplicaWhenWriterIsUnavailable(t *testing.T) {
+	state := observability.NewHealthState(7)
+	state.MarkStarted(7)
+	ready := ReadinessHandler(state, unavailableDatabase{})
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.SetRequestURI("/readyz")
+	ready(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusServiceUnavailable {
+		t.Fatalf("writer outage readiness status = %d, want %d", ctx.Response.StatusCode(), fasthttp.StatusServiceUnavailable)
 	}
 }
 
