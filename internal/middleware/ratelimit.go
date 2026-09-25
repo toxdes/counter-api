@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"counter/internal/observability"
 	"net"
 	"strconv"
@@ -19,6 +20,7 @@ const (
 type RateLimiter struct {
 	mu              sync.RWMutex
 	store           map[string]*tokenBucket
+	sharedBackend   SharedRateLimitBackend
 	maxRequests     int
 	maxGetRequests  int
 	window          time.Duration
@@ -52,6 +54,40 @@ func NewRateLimiter(maxRequests int, getMultiplier int, windowSeconds int) *Rate
 
 // AllowRequest checks if a request from the given IP should be allowed
 func (rl *RateLimiter) AllowRequest(ip string, isGet bool) (bool, int) {
+	allowed, retryAfter, _ := rl.AllowRequestWithContext(context.Background(), ip, isGet)
+	return allowed, retryAfter
+}
+
+// SetSharedBackend enables optional shared quota state. If the backend fails,
+// requests fall back to this limiter's bounded in-process buckets.
+func (rl *RateLimiter) SetSharedBackend(backend SharedRateLimitBackend) {
+	rl.sharedBackend = backend
+}
+
+// AllowRequestWithContext consults the shared backend when configured and
+// falls back locally on failure. The boolean result reports that fallback.
+func (rl *RateLimiter) AllowRequestWithContext(ctx context.Context, ip string, isGet bool) (allowed bool, retryAfter int, fellBack bool) {
+	if rl.sharedBackend != nil {
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		sharedContext, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		maxRequests := rl.maxRequests
+		if isGet {
+			maxRequests = rl.maxGetRequests
+		}
+		allowed, retryAfter, err := rl.sharedBackend.AllowRequest(sharedContext, ip, isGet, maxRequests, rl.window.Microseconds())
+		cancel()
+		if err == nil {
+			return allowed, retryAfter, false
+		}
+		fellBack = true
+	}
+	allowed, retryAfter = rl.allowLocalRequest(ip, isGet)
+	return allowed, retryAfter, fellBack
+}
+
+func (rl *RateLimiter) allowLocalRequest(ip string, isGet bool) (bool, int) {
 	rl.mu.Lock()
 
 	bucket, exists := rl.store[ip]
@@ -80,6 +116,14 @@ func (rl *RateLimiter) AllowRequest(ip string, isGet bool) (bool, int) {
 	rl.mu.Unlock()
 
 	return bucket.allowRequest(isGet)
+}
+
+// Close releases optional shared limiter resources, if any.
+func (rl *RateLimiter) Close() error {
+	if closer, ok := rl.sharedBackend.(interface{ Close() error }); ok {
+		return closer.Close()
+	}
+	return nil
 }
 
 // Cleanup removes stale entries from the rate limiter
@@ -257,7 +301,11 @@ func RateLimitWithMetrics(rl *RateLimiter, metrics *observability.Metrics) func(
 			}
 
 			// Check if request should be allowed
-			allowed, retryAfter := rl.AllowRequest(key, isGet)
+			requestContext, _ := RequestContextFromRequest(ctx)
+			allowed, retryAfter, fellBack := rl.AllowRequestWithContext(requestContext, key, isGet)
+			if fellBack && metrics != nil {
+				metrics.RecordEvent("rate_limit_backend_fallback")
+			}
 
 			// Set rate limit headers
 			maxReq := rl.maxRequests

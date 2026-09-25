@@ -69,8 +69,8 @@ func (s *CounterStore) CreateCounter(ctx context.Context, counter *models.Counte
 			tenant_id, counter_id, operation_id, kind, delta, request_hash,
 			value_before, value_after, state, created_at, completed_at
 		)
-		SELECT $1, $2, md5('counter-initial:' || $2::text)::uuid, 'initial_value', $3,
-			decode(md5('counter-initial:' || $2::text), 'hex'), 0, $3, 'completed', $4, $4
+		SELECT $1::uuid, $2::uuid, md5('counter-initial:' || ($2::uuid)::text)::uuid, 'initial_value', $3::bigint,
+			decode(md5('counter-initial:' || ($2::uuid)::text), 'hex'), 0, $3::bigint, 'completed', $4::timestamptz, $4::timestamptz
 	`, counter.TenantID, counter.ID, counter.Value, counter.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("record initial counter value: %w", err)
@@ -162,6 +162,24 @@ func (s *CounterStore) incrementCounter(ctx context.Context, tenantID, counterID
 		}
 	}()
 
+	var current struct {
+		Value    int64 `db:"value"`
+		MaxDelta int64 `db:"max_delta"`
+	}
+	if err := tx.GetContext(ctx, &current, `
+		SELECT value, max_delta
+		FROM counters
+		WHERE tenant_id = $1 AND id = $2
+		FOR UPDATE
+	`, tenantID, counterID); errors.Is(err, sql.ErrNoRows) {
+		return MutationResult{}, ErrCounterNotFound
+	} else if err != nil {
+		return MutationResult{}, fmt.Errorf("lock counter for increment: %w", err)
+	}
+
+	// Lock the counter before inserting the operation row. The operation row's
+	// foreign key takes a key-share lock on the counter; reserving several rows
+	// first and then asking all transactions for FOR UPDATE can deadlock.
 	var insertedID string
 	err = tx.QueryRowxContext(ctx, `
 		INSERT INTO counter_operations (
@@ -192,20 +210,6 @@ func (s *CounterStore) incrementCounter(ctx context.Context, tenantID, counterID
 		return MutationResult{}, fmt.Errorf("reserve increment operation: %w", err)
 	}
 
-	var current struct {
-		Value    int64 `db:"value"`
-		MaxDelta int64 `db:"max_delta"`
-	}
-	if err := tx.GetContext(ctx, &current, `
-		SELECT value, max_delta
-		FROM counters
-		WHERE tenant_id = $1 AND id = $2
-		FOR UPDATE
-	`, tenantID, counterID); errors.Is(err, sql.ErrNoRows) {
-		return MutationResult{}, ErrCounterNotFound
-	} else if err != nil {
-		return MutationResult{}, fmt.Errorf("lock counter for increment: %w", err)
-	}
 	if delta <= 0 {
 		return MutationResult{}, fmt.Errorf("increment counter: delta must be positive")
 	}

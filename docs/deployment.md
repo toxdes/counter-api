@@ -134,6 +134,47 @@ For a rolling deployment, remove the instance from `/readyz` traffic, send
 SIGTERM, wait for the process to exit, and then replace it. Do not use sticky
 sessions for correctness.
 
+For a local multi-replica smoke topology, the repository includes three API
+instances, PostgreSQL, and an HAProxy frontend with active `/readyz` checks:
+
+```bash
+docker compose -f deploy/scalability/compose.yaml up --build -d
+docker compose -f deploy/scalability/compose.yaml ps
+docker compose -f deploy/scalability/compose.yaml port load-balancer 8080
+```
+
+Use the loopback address and assigned port from the last command to check
+`/readyz`. The topology uses local-only credentials, publishes only the HAProxy
+port on loopback, and gives each API instance five PostgreSQL connections. Its named
+database volume remains after `docker compose down`. Stop one API service to
+observe health-check removal, then start it again:
+
+```bash
+docker compose -f deploy/scalability/compose.yaml stop api2
+docker compose -f deploy/scalability/compose.yaml up -d api2
+```
+
+This is a development smoke setup, not a production deployment template.
+`TestIdempotentIncrementCanRetryAcrossRouterReplicas` exercises a retry against
+different router instances using the same PostgreSQL database.
+
+To include the optional shared rate-limit backend in the local topology, add
+the Redis override:
+
+```bash
+docker compose -f deploy/scalability/compose.yaml \
+  -f deploy/scalability/compose.redis.yaml up --build -d
+docker compose -f deploy/scalability/compose.yaml \
+  -f deploy/scalability/compose.redis.yaml port redis 6379
+```
+
+Use the assigned loopback port as `RATE_LIMIT_REDIS_TEST_URL` when running
+`TestRedisSharedLimitAcrossIndependentClients`. Without Redis, each API replica
+uses its local bounded limiter. With `RATE_LIMIT_REDIS_URL` configured, replicas
+share rate-limit buckets through Redis. Redis is not used for counter state or
+idempotency; if it cannot be reached, requests fall back to the local limiter
+and the `rate_limit_backend_fallback` metric increases.
+
 ### 5. Backups and restore verification
 
 Use managed PostgreSQL point-in-time recovery where available, with a recovery
@@ -361,22 +402,18 @@ Increase resources:
 
 ### Horizontal Scaling
 
-For multiple instances:
+Run stateless API replicas behind an external load balancer and keep PostgreSQL
+as the source of truth. The API does not implement load balancing. Do not use
+sticky sessions; retries can reach any replica because mutation idempotency is
+stored in PostgreSQL.
 
-1. **Replace in-memory rate limiter with Redis**
-   - Rate limit state must be shared
-   - Use Redis INCR for atomic operations
-   - TTL for automatic cleanup
-
-2. **Add load balancer**
-   - nginx, HAProxy, or cloud LB
-   - Round-robin or least-connections
-   - Health check endpoints
-
-3. **Use PostgreSQL read replicas**
-   - Direct read traffic to replicas
-   - Write to primary only
-   - Use connection pooling (PgBouncer)
+The default token bucket lives in each API process, so its effective allowance
+is per replica and multiplies as replicas are added. Set `RATE_LIMIT_REDIS_URL`
+to share tenant/key buckets across replicas; Redis is optional, and an outage
+falls back to each process's local bounded limiter. Use edge controls for
+coarse shared IP limits. Counter correctness and idempotency remain PostgreSQL
+backed and do not depend on Redis. Budget all replica connection pools together
+and keep read-after-write traffic on the PostgreSQL writer.
 
 ## Troubleshooting
 

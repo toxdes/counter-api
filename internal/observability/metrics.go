@@ -123,6 +123,7 @@ func (m *Metrics) RenderPrometheus(pool PoolMetrics, version string, schemaVersi
 		"idempotency_replay",
 		"overload_rejected",
 		"rate_limit_rejected",
+		"rate_limit_backend_fallback",
 		"reconciliation_mismatch",
 		"service_error",
 		"transaction_error",

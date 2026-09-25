@@ -1,0 +1,72 @@
+name: counter-scalability
+
+x-api: &api
+  build:
+    context: ../..
+  environment: &api-environment
+    SERVER_HOST: 0.0.0.0
+    SERVER_PORT: 8080
+    DATABASE_URL: postgres://counter:local-only-counter@postgres:5432/counter?sslmode=disable
+    DB_MAX_OPEN_CONNS: 5
+    DB_MAX_IDLE_CONNS: 1
+    API_KEY: local-scalability-test-key
+    LEGACY_API_KEY_ENABLED: "true"
+    RATE_LIMIT_REQUESTS: 10000
+    RATE_LIMIT_GET_MULTIPLIER: 3
+    RATE_LIMIT_WINDOW: 60
+    RATE_LIMIT_CLEANUP: 300
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  restart: unless-stopped
+  stop_grace_period: 20s
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "127.0.0.1::5432"
+    environment:
+      POSTGRES_DB: counter
+      POSTGRES_USER: counter
+      POSTGRES_PASSWORD: local-only-counter
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U counter -d counter"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  migrate:
+    build:
+      context: ../..
+    environment: *api-environment
+    command: ["--db-migrate=up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api1:
+    <<: *api
+
+  api2:
+    <<: *api
+
+  api3:
+    <<: *api
+
+  load-balancer:
+    image: haproxy:3.2-alpine
+    ports:
+      - "127.0.0.1::8080"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - api1
+      - api2
+      - api3
+
+volumes:
+  postgres-data:

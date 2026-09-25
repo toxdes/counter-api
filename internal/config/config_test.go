@@ -11,6 +11,7 @@ func TestLoadDefaults(t *testing.T) {
 		"SERVER_HOST", "SERVER_PORT",
 		"DATABASE_URL",
 		"API_KEY", "RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW",
+		"RATE_LIMIT_REDIS_URL",
 	} {
 		os.Unsetenv(env)
 	}
@@ -68,6 +69,20 @@ func TestLoadFromEnv(t *testing.T) {
 	}
 	if cfg.APIKey != "test-key" {
 		t.Errorf("Expected APIKey 'test-key', got '%s'", cfg.APIKey)
+	}
+}
+
+func TestRateLimitRedisURLIsOptional(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://testuser:testpass@localhost/testdb?sslmode=disable")
+	t.Setenv("API_KEY", "test-key")
+	t.Setenv("RATE_LIMIT_REDIS_URL", "redis://localhost:6379/0")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed with optional Redis URL: %v", err)
+	}
+	if cfg.RateLimitRedisURL != "redis://localhost:6379/0" {
+		t.Fatalf("RateLimitRedisURL = %q, want configured URL", cfg.RateLimitRedisURL)
 	}
 }
 

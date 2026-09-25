@@ -42,6 +42,7 @@ type Config struct {
 	RateLimitGetMultiplier int
 	RateLimitWindow        int
 	RateLimitCleanup       int
+	RateLimitRedisURL      string
 
 	// CORS
 	CORSAllowedOrigins   string
@@ -98,6 +99,7 @@ func Load() (*Config, error) {
 		RateLimitGetMultiplier: getEnvInt("RATE_LIMIT_GET_MULTIPLIER", 3),
 		RateLimitWindow:        getEnvInt("RATE_LIMIT_WINDOW", 60),
 		RateLimitCleanup:       getEnvInt("RATE_LIMIT_CLEANUP", 300),
+		RateLimitRedisURL:      getEnv("RATE_LIMIT_REDIS_URL", ""),
 
 		CORSAllowedOrigins:   getEnv("CORS_ALLOWED_ORIGINS", "*"),
 		CORSAllowedMethods:   getEnv("CORS_ALLOWED_METHODS", "GET,POST,OPTIONS"),

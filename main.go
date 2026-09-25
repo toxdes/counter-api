@@ -131,6 +131,16 @@ func main() {
 	}
 
 	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRequests, cfg.RateLimitGetMultiplier, cfg.RateLimitWindow)
+	if cfg.RateLimitRedisURL != "" {
+		sharedLimiter, err := middleware.NewRedisRateLimitBackend(cfg.RateLimitRedisURL)
+		if err != nil {
+			log.Printf("Redis rate limit backend configuration invalid; using local limiter")
+		} else {
+			rateLimiter.SetSharedBackend(sharedLimiter)
+			defer rateLimiter.Close()
+			log.Println("Shared Redis rate limiting configured; local fallback remains enabled")
+		}
+	}
 
 	logger := middleware.NewDefaultLogger(cfg.LogLevel)
 
