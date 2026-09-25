@@ -98,9 +98,12 @@ disable it safely, first provision a managed administrator credential through
 
 The request timeout is route-class based: reads default to five seconds and
 mutations to ten seconds. Database operations receive a two-second budget,
-while PostgreSQL also enforces statement, lock, and idle-transaction
-timeouts. Keep `DB_MAX_OPEN_CONNS` within the database's global connection
-budget when running more than one API replica; each replica's pool is additive.
+and that request context bounds database calls. Direct PostgreSQL connections
+also receive the configured statement, lock, and idle-transaction startup
+timeouts. Neon pooled URLs reject those startup options, so the app omits them
+for detected Neon pooler hosts and logs that choice. Keep
+`DB_MAX_OPEN_CONNS` within the database's global connection budget when running
+more than one API replica; each replica's pool is additive.
 The default 64 KiB body limit is intentionally sized for the JSON API rather
 than file uploads.
 
@@ -126,6 +129,14 @@ connection, and upstream timeout limits before forwarding to Go.
 ```bash
 make migrate-up
 ```
+
+If `DATABASE_URL` uses Neon's `-pooler` endpoint, set optional
+`MIGRATION_DATABASE_URL` to the matching direct Neon connection URL (same
+database and branch, without `-pooler`). The migration runner takes a
+session-level PostgreSQL advisory lock, so it must connect directly. Runtime
+traffic continues using `DATABASE_URL`. Leave `MIGRATION_DATABASE_URL` unset
+for deployments where `DATABASE_URL` is already a direct connection or where
+the provider supports the runner's session lock semantics.
 
 To roll back one migration, run `make migrate-down`. Each invocation rolls
 back only the highest applied migration; repeat it deliberately for additional

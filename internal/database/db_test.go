@@ -24,6 +24,36 @@ func TestWithPostgresTimeoutsPreservesExistingOptions(t *testing.T) {
 	}
 }
 
+func TestWithPostgresTimeoutsSkipsNeonPoolerStartupOptions(t *testing.T) {
+	url := "postgres://app:secret@ep-example-pooler.us-east-2.aws.neon.tech/counter?sslmode=require&channel_binding=require"
+	got, err := withPostgresTimeouts(url, 2*time.Second, 500*time.Millisecond, 10*time.Second)
+	if err != nil {
+		t.Fatalf("withPostgresTimeouts() error = %v", err)
+	}
+	if got != url {
+		t.Fatalf("Neon pooled URL changed: got %q, want unchanged URL %q", got, url)
+	}
+}
+
+func TestIsNeonPoolerURL(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{name: "Neon pooler", url: "postgres://user:pass@ep-example-pooler.us-east-2.aws.neon.tech/db", want: true},
+		{name: "Neon direct", url: "postgres://user:pass@ep-example.us-east-2.aws.neon.tech/db", want: false},
+		{name: "other postgres", url: "postgres://user:pass@db.example.com/db", want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := IsNeonPoolerURL(test.url); got != test.want {
+				t.Fatalf("IsNeonPoolerURL() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
 func containsAll(value string, parts []string) bool {
 	for _, part := range parts {
 		if !strings.Contains(value, part) {

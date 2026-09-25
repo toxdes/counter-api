@@ -9,7 +9,7 @@ func TestLoadDefaults(t *testing.T) {
 	// Clear all env vars
 	for _, env := range []string{
 		"SERVER_HOST", "SERVER_PORT",
-		"DATABASE_URL",
+		"DATABASE_URL", "MIGRATION_DATABASE_URL",
 		"API_KEY", "RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW",
 		"RATE_LIMIT_REDIS_URL",
 		"COUNTER_READ_CACHE_REDIS_URL", "COUNTER_READ_CACHE_MAX_ENTRIES", "COUNTER_READ_CACHE_TTL_SECONDS",
@@ -22,6 +22,7 @@ func TestLoadDefaults(t *testing.T) {
 	os.Setenv("API_KEY", "test-key")
 	defer func() {
 		os.Unsetenv("DATABASE_URL")
+		os.Unsetenv("MIGRATION_DATABASE_URL")
 		os.Unsetenv("API_KEY")
 	}()
 
@@ -70,6 +71,20 @@ func TestLoadFromEnv(t *testing.T) {
 	}
 	if cfg.APIKey != "test-key" {
 		t.Errorf("Expected APIKey 'test-key', got '%s'", cfg.APIKey)
+	}
+}
+
+func TestMigrationDatabaseURLIsOptional(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://pooled/db?sslmode=require&channel_binding=require")
+	t.Setenv("MIGRATION_DATABASE_URL", "postgres://direct/db?sslmode=require&channel_binding=require")
+	t.Setenv("API_KEY", "test-key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if cfg.MigrationDatabaseURL != "postgres://direct/db?sslmode=require&channel_binding=require" {
+		t.Fatalf("MigrationDatabaseURL = %q, want configured direct URL", cfg.MigrationDatabaseURL)
 	}
 }
 

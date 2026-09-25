@@ -51,9 +51,22 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
+	// Migrations hold a session-level advisory lock, so use a direct database
+	// connection when a separate migration URL is configured. Neon pooled URLs
+	// are unsuitable for this lock and require an explicit direct URL.
+	databaseURL := databaseURLForCommand(cfg.DatabaseURL, cfg.MigrationDatabaseURL, *migrateFlag != "")
+	if *migrateFlag != "" {
+		if cfg.MigrationDatabaseURL != "" {
+			log.Println("Using MIGRATION_DATABASE_URL for database migration")
+		}
+		if database.IsNeonPoolerURL(databaseURL) {
+			log.Fatal("database migrations require a direct Neon URL; set MIGRATION_DATABASE_URL without the -pooler hostname")
+		}
+	}
+
 	// Initialize database
 	dbCfg := &database.DBConfig{
-		DatabaseURL:            cfg.DatabaseURL,
+		DatabaseURL:            databaseURL,
 		MaxOpenConns:           cfg.DBMaxOpenConns,
 		MaxIdleConns:           cfg.DBMaxIdleConns,
 		ConnMaxIdleTime:        time.Duration(cfg.DBMaxIdleTime) * time.Second,
@@ -293,4 +306,11 @@ func main() {
 			log.Printf("Server stopped unexpectedly: %v", err)
 		}
 	}
+}
+
+func databaseURLForCommand(runtimeURL, migrationURL string, isMigration bool) string {
+	if isMigration && migrationURL != "" {
+		return migrationURL
+	}
+	return runtimeURL
 }
