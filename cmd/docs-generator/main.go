@@ -154,11 +154,11 @@ func generateHTML(requests []BrunoRequest) string {
     </style>
 </head>
 <body>
-    <div class="topbar"><div class="topbar-inner"><a class="brand" href="/">Counter API</a><nav aria-label="Main navigation"><a href="#endpoints">API reference</a><a href="/tools/curl">Command builder</a></nav></div></div>
+    <div class="topbar"><div class="topbar-inner"><a class="brand" href="/">Counter API</a><nav aria-label="Main navigation"><a href="#endpoints">API reference</a><a href="/tools/curl">cURL helper</a><a href="https://github.com/toxdes/counter-api">GitHub</a></nav></div></div>
     <main>
         <section class="hero" aria-labelledby="page-title"><h1 id="page-title">A small counter API. Built to be dependable.</h1>
         <p class="lead">Create counters, read their current values, and keep a durable record of each change.</p>
-        <div class="hero-actions"><a class="primary-link" href="/tools/curl">Build setup commands <span aria-hidden="true">&nbsp;→</span></a><a href="#endpoints">Browse endpoints</a></div></section>
+        <div class="hero-actions"><a class="primary-link" href="/tools/curl">use cURL helper <span aria-hidden="true">&nbsp;→</span></a><a href="#endpoints">Browse endpoints</a></div></section>
         <div class="security" aria-label="API guarantees"><span><strong>Scoped keys</strong> for tenant access</span><span><strong>Idempotent changes</strong> safe to retry</span><span><strong>Operation history</strong> records each mutation</span></div>
         <section id="endpoints" aria-labelledby="endpoint-heading"><div class="section-heading"><h2 id="endpoint-heading">API reference</h2></div>
         <div class="reference-layout">

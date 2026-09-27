@@ -28,24 +28,25 @@
     }
     * { box-sizing: border-box; }
     html { background: var(--ground); scroll-behavior: smooth; scrollbar-color: #566263 var(--ground); }
-    body { margin: 0; background: var(--ground); color: var(--ink); font-size: 1rem; line-height: 1.5; caret-color: var(--accent); }
+    body { margin: 0; background: var(--ground); color: var(--ink); font-size: 1rem; line-height: 1.6; caret-color: var(--accent); }
     ::selection { color: var(--ground); background: var(--accent); }
     a { color: var(--accent-hover); text-underline-offset: 4px; }
     a:hover { color: var(--ink); }
     .topbar { min-height: 68px; background: var(--ground); }
-    .topbar-inner, main { width: min(1399px, calc(100% - 64px)); margin: 0 auto; }
+    .topbar-inner, main { width: min(1180px, calc(100% - 64px)); margin: 0 auto; }
     .topbar-inner { min-height: 68px; padding: 8px 0 12px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
-    .brand { color: var(--ink); font-size: 1.2rem; font-weight: 700; letter-spacing: -.025em; text-decoration: none; }
-    .topbar a:not(.brand) { color: var(--muted); padding: 10px 12px; font-size: 1rem; font-weight: 600; text-decoration: none; }
-    main { padding: 35px 0 64px; }
+    .brand { color: var(--ink); font-size: 1.2rem; font-weight: 700; letter-spacing: -.03em; text-decoration: none; }
+    .topbar nav { display: flex; align-items: center; gap: 24px; }
+    .topbar a:not(.brand) { color: var(--muted); padding: 10px 0; font-size: .92rem; font-weight: 600; text-decoration: none; }
+    main { padding: 62px 0 90px; }
     h1 { max-width: 18ch; margin: 0; font-size: clamp(2.5rem, 3.55vw, 3.3rem); line-height: 1.2; letter-spacing: -.035em; font-weight: 700; }
     .intro { max-width: 68ch; margin: 14px 0 22px; color: var(--muted); font-size: 1rem; line-height: 1.6; }
     .origin { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 24px; padding: 16px 28px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
-    label { display: block; margin-bottom: 7px; font-size: 1.05rem; font-weight: 500; }
-    .origin label { margin-bottom: 10px; font-size: 1.18rem; line-height: 1.7; }
+    label { display: block; margin-bottom: 7px; font-size: 1rem; font-weight: 500; }
+    .origin label { margin-bottom: 10px; font-size: 1rem; line-height: 1.5; }
     input[type="text"], input[type="url"], input[type="number"], input[type="password"] {
       width: 100%; min-height: 52px; padding: 10px 14px; border: 1px solid #5b6665; border-radius: 4px;
-      background: #1e2b2b; color: var(--ink); font: inherit; font-size: 1.1rem; line-height: 1.4;
+      background: #1e2b2b; color: var(--ink); font: inherit; font-size: 1rem; line-height: 1.4;
     }
     input:focus-visible, button:focus-visible, a:focus-visible {
       outline: 2px solid var(--focus); outline-offset: 3px;
@@ -58,7 +59,7 @@
     .step:focus-within { background: rgba(255,255,255,.012); }
     .step-title { display: flex; gap: 16px; align-items: center; }
     .step-number { flex: 0 0 60px; width: 60px; height: 60px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--ground); font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-    h2 { margin: 0; font-size: 1.9rem; line-height: 1.2; letter-spacing: -.02em; font-weight: 650; }
+    h2 { margin: 0; font-size: 1.5rem; line-height: 1.2; letter-spacing: -.025em; font-weight: 650; }
     .step-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 22px 24px; margin-top: 18px; }
     .step[aria-labelledby="tenant-title"] .step-fields > div:first-child { max-width: 692px; }
     .step-fields > .field-row { grid-column: 1 / -1; }
@@ -71,7 +72,7 @@
     .code-wrap { min-width: 0; padding: 16px; border: 1px solid #303a3c; border-radius: 4px; background: #182121; }
     .code-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
     .command-label { margin: 0; font-size: .9rem; font-weight: 600; }
-    .command-text { display: block; margin: 0; padding: 14px 16px; overflow: auto; border: 1px solid #303a3c; border-radius: 3px; background: var(--code); color: #e4e6e8; font: 1rem/1.65 "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace; tab-size: 2; white-space: pre; }
+    .command-text { display: block; margin: 0; padding: 14px 16px; overflow: auto; border: 1px solid #303a3c; border-radius: 3px; background: var(--code); color: #e4e6e8; font: .86rem/1.6 "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace; tab-size: 2; white-space: pre; }
     .copy { min-width: 52px; min-height: 36px; padding: 6px 10px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--accent-hover); font: inherit; font-size: .86rem; font-weight: 600; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; }
     .copy:hover { background: var(--surface-raised); color: var(--ink); }
     .copy:active { background: #263231; }
@@ -80,12 +81,10 @@
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     .warning { margin: 10px 0 0; color: #f0bd82; font-size: .88rem; }
     footer { max-width: 82ch; padding-top: 12px; color: var(--muted); font-size: .86rem; }
-    .step:nth-of-type(2) .step-number { background: #647268; color: var(--ground); font-size: 1.2rem; }
-    @media (max-width: 780px) {
-      .topbar-inner, main { width: min(100% - 32px, 600px); }
-      main { padding-top: 32px; }
+    @media (max-width: 760px) {
+      .topbar-inner, main { width: min(100% - 36px, 600px); }
+      main { padding-top: 40px; }
       .origin, .step-fields { grid-template-columns: 1fr; }
-      .origin label { font-size: 1.05rem; line-height: 1.5; }
       .step-fields > .field-row { grid-column: auto; }
       .step[aria-labelledby="tenant-title"] .step-fields > div:first-child { max-width: none; }
       .step { gap: 24px; padding: 28px 22px 30px; }
@@ -94,11 +93,10 @@
     @media (max-width: 480px) {
       .field-row, .scope-list { grid-template-columns: 1fr; }
       .topbar-inner { min-height: 60px; }
-      .topbar a:not(.brand) { font-size: .82rem; }
+      .topbar nav { gap: 14px; }
       .origin { padding: 18px; }
       .step-number { flex-basis: 46px; width: 46px; height: 46px; }
-      h2 { font-size: 1.45rem; }
-      .command-text { padding: 12px; font-size: .88rem; }
+      .command-text { padding: 12px; }
       .copy { min-width: 44px; min-height: 44px; padding: 6px 10px; }
     }
     @media (pointer: coarse) { .copy { min-height: 44px; } }
@@ -109,7 +107,10 @@
   <div class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/">Counter API</a>
-      <a href="/" aria-label="Back to documentation">Docs</a>
+      <nav aria-label="Main navigation">
+        <a href="/" aria-label="Back to documentation">Docs</a>
+        <a href="https://github.com/toxdes/counter-api">GitHub</a>
+      </nav>
     </div>
   </div>
   <main>
@@ -125,7 +126,7 @@
       <div>
         <label for="api-key">API Key</label>
         <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="Administrator API key">
-        <p class="secret-note">Used for steps 1–2. It stays in this page, but appears in the generated command and clipboard.</p>
+        <p class="secret-note">Used for steps 1, 2, and 4. It stays in this page, but appears in the generated command and clipboard.</p>
       </div>
     </div>
 
@@ -156,12 +157,12 @@
                 <label class="scope-option"><input type="checkbox" name="scope" value="tenant:read"> <code>tenant:read</code></label>
                 <label class="scope-option"><input type="checkbox" name="scope" value="counter:read" checked> <code>counter:read</code></label>
                 <label class="scope-option"><input type="checkbox" name="scope" value="counter:list"> <code>counter:list</code></label>
-                <label class="scope-option"><input type="checkbox" name="scope" value="counter:create" checked> <code>counter:create</code></label>
-                <label class="scope-option"><input type="checkbox" name="scope" value="counter:increment" checked> <code>counter:increment</code></label>
+                <label class="scope-option"><input type="checkbox" name="scope" value="counter:create"> <code>counter:create</code></label>
+                <label class="scope-option"><input type="checkbox" name="scope" value="counter:increment"> <code>counter:increment</code></label>
                 <label class="scope-option"><input type="checkbox" name="scope" value="counter:adjust"> <code>counter:adjust</code></label>
-                <label class="scope-option"><input type="checkbox" name="scope" value="counter:history" checked> <code>counter:history</code></label>
+                <label class="scope-option"><input type="checkbox" name="scope" value="counter:history"> <code>counter:history</code></label>
               </div>
-              <p class="hint">The default set is read, increment, and history. Listing exposes the tenant’s counter inventory, so grant <code>counter:list</code> only when needed. Leaving every scope unchecked uses the default set.</p>
+              <p class="hint">Defaults to read-only access. Select additional permissions only as needed; clearing every option restores this default.</p>
             </fieldset>
           </div>
         </div>
@@ -193,9 +194,40 @@
           <p class="status" id="counter-status" aria-live="polite"></p>
         </div>
       </section>
+
+      <section class="step" aria-labelledby="tenant-read-title">
+        <div>
+          <div class="step-title"><span class="step-number" aria-hidden="true">4</span><div><h2 id="tenant-read-title">Get tenant</h2><p class="description">Uses the API Key above. Paste the <code>tenant_id</code> returned in step 1.</p></div></div>
+          <div class="step-fields">
+            <div><label for="tenant-read-id">Tenant ID</label><input id="tenant-read-id" type="text" placeholder="Paste tenant_id from step 1" autocomplete="off" spellcheck="false"></div>
+          </div>
+        </div>
+        <div class="code-wrap">
+          <div class="code-heading"><span class="command-label" id="tenant-read-command-label">Generated command</span><button class="copy" type="button" data-copy="tenant-read-command" aria-label="Copy get-tenant command"><span class="copy-label">Copy</span></button></div>
+          <pre class="command-text" aria-labelledby="tenant-read-command-label"><code id="tenant-read-command"></code></pre>
+          <span class="sr-only" id="tenant-read-copy-live" aria-live="polite"></span>
+          <p class="status" id="tenant-read-status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="step" aria-labelledby="counter-read-title">
+        <div>
+          <div class="step-title"><span class="step-number" aria-hidden="true">5</span><div><h2 id="counter-read-title">Get counter</h2><p class="description">Uses the tenant ID and API Key from step 3 with <code>counter:read</code>. Paste the <code>counter_id</code> returned in step 3.</p></div></div>
+          <div class="step-fields">
+            <div><label for="counter-read-id">Counter ID</label><input id="counter-read-id" type="text" placeholder="Paste counter_id from step 3" autocomplete="off" spellcheck="false"></div>
+          </div>
+        </div>
+        <div class="code-wrap">
+          <div class="code-heading"><span class="command-label" id="counter-read-command-label">Generated command</span><button class="copy" type="button" data-copy="counter-read-command" aria-label="Copy get-counter command"><span class="copy-label">Copy</span></button></div>
+          <pre class="command-text" aria-labelledby="counter-read-command-label"><code id="counter-read-command"></code></pre>
+          <span class="sr-only" id="counter-read-copy-live" aria-live="polite"></span>
+          <p class="warning" id="counter-read-warning" hidden>The selected tenant key needs permission to read counters.</p>
+          <p class="status" id="counter-read-status" aria-live="polite"></p>
+        </div>
+      </section>
     </div>
 
-    <footer>Tenant and credential IDs are copied manually from each JSON response. Commands contain the API key you entered; avoid sharing them or saving them in shell history.</footer>
+    <footer>Tenant, counter, and credential IDs are copied manually from each JSON response. Commands contain the API key you entered; avoid sharing them or saving them in shell history.</footer>
   </main>
 
   <script>
@@ -210,10 +242,21 @@
         "curl --silent --show-error -X POST " + shellQuote(url) + " \\",
         "  --header " + shellQuote("X-API-Key: " + apiKey) + " \\",
         "  --header 'Content-Type: application/json' \\",
-        "  --data-raw " + shellQuote(JSON.stringify(body, null, 2))
+        "  --data-raw " + shellQuote(JSON.stringify(body, null, 2)) + " | jq ."
+      ].join("\n");
+      const curlGet = (url, apiKey) => [
+        "curl --silent --show-error --request GET " + shellQuote(url) + " \\",
+        "  --header " + shellQuote("X-API-Key: " + apiKey) + " | jq ."
       ].join("\n");
       const origin = () => baseUrl.value.trim().replace(/\/+$/, "");
-      const selectedScopes = () => Array.from(document.querySelectorAll('input[name="scope"]:checked')).map((input) => input.value);
+      const selectedScopes = () => {
+        const scopes = Array.from(document.querySelectorAll('input[name="scope"]:checked')).map((input) => input.value);
+        if (scopes.length === 0) {
+          document.querySelector('input[name="scope"][value="counter:read"]').checked = true;
+          return ["counter:read"];
+        }
+        return scopes;
+      };
       const refresh = () => {
         const root = origin();
         const tenantLabel = byId("tenant-label").value;
@@ -223,7 +266,7 @@
         const tenantId = byId("credential-tenant-id").value.trim();
         const credentialBody = {};
         const scopes = selectedScopes();
-        if (scopes.length) credentialBody.scopes = scopes;
+        credentialBody.scopes = scopes;
         byId("credential-command").textContent = curl(root + "/v2/tenants/" + encodeURIComponent(tenantId) + "/credentials", apiKey, credentialBody);
 
         const counterTenantId = byId("counter-tenant-id").value.trim();
@@ -245,12 +288,19 @@
           byId("counter-status").textContent = "";
         }
         byId("counter-warning").hidden = scopes.includes("counter:create");
+
+        const tenantReadID = byId("tenant-read-id").value.trim();
+        byId("tenant-read-command").textContent = curlGet(root + "/tenants/" + encodeURIComponent(tenantReadID), byId("api-key").value);
+
+        const counterReadID = byId("counter-read-id").value.trim();
+        byId("counter-read-command").textContent = curlGet(root + "/v2/tenants/" + encodeURIComponent(counterTenantId) + "/counters/" + encodeURIComponent(counterReadID), byId("tenant-api-key").value);
+        byId("counter-read-warning").hidden = scopes.includes("counter:read");
       };
       const curlWithRawJSON = (url, apiKey, rawJSON) => [
         "curl --silent --show-error -X POST " + shellQuote(url) + " \\",
         "  --header " + shellQuote("X-API-Key: " + apiKey) + " \\",
         "  --header 'Content-Type: application/json' \\",
-        "  --data-raw " + shellQuote(rawJSON)
+        "  --data-raw " + shellQuote(rawJSON) + " | jq ."
       ].join("\n");
 
       document.querySelectorAll("input").forEach((input) => input.addEventListener("input", refresh));
