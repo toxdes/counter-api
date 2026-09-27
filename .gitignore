@@ -14,6 +14,7 @@ docs-generator
 *.o
 *.a
 internal/handlers/docs.html
+.impeccable/
 
 # Test files
 *.test
