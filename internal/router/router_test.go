@@ -1,8 +1,11 @@
 package router
 
 import (
+	"context"
 	"counter/internal/database"
 	"counter/internal/middleware"
+	"counter/internal/service"
+	"counter/internal/store"
 	"counter/internal/testutil"
 	"testing"
 
@@ -29,6 +32,47 @@ func TestRouterSetup(t *testing.T) {
 
 	if router == nil {
 		t.Error("Expected router to be created")
+	}
+}
+
+func TestCounterReadAndListPermissionsAreSeparate(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestDB(t, db)
+
+	corsConfig := &middleware.CORSConfig{AllowedOrigins: "*", AllowedMethods: "GET,POST,OPTIONS", AllowedHeaders: "Content-Type,Authorization,X-API-Key"}
+	router := NewRouter(db, corsConfig, middleware.NewRateLimiter(20, 1, 60), "legacy-admin", middleware.NewDefaultLogger("info"), nil)
+	tenantID := createTestTenant(t, db, "scope-boundary")
+	counterID := createTestCounter(t, db, tenantID, "private-count", 7)
+	credentials := service.NewCredentialService(store.NewCredentialStore(db))
+	readCredential, err := credentials.Create(context.Background(), tenantID, []string{middleware.ScopeCounterRead}, nil, "test-admin")
+	if err != nil {
+		t.Fatalf("create read credential: %v", err)
+	}
+	listCredential, err := credentials.Create(context.Background(), tenantID, []string{middleware.ScopeCounterList}, nil, "test-admin")
+	if err != nil {
+		t.Fatalf("create list credential: %v", err)
+	}
+
+	request := func(key, path string) int {
+		ctx := &fasthttp.RequestCtx{}
+		ctx.Request.SetRequestURI(path)
+		ctx.Request.Header.SetMethod("GET")
+		ctx.Request.Header.Set("X-API-Key", key)
+		router.ServeHTTP(ctx)
+		return ctx.Response.StatusCode()
+	}
+	if status := request(readCredential.APIKey, "/tenants/"+tenantID+"/counters/"+counterID); status != fasthttp.StatusOK {
+		t.Errorf("counter:read GET status = %d, want 200", status)
+	}
+	if status := request(readCredential.APIKey, "/tenants/"+tenantID+"/counters"); status != fasthttp.StatusForbidden {
+		t.Errorf("counter:read list status = %d, want 403", status)
+	}
+	if status := request(listCredential.APIKey, "/tenants/"+tenantID+"/counters"); status != fasthttp.StatusOK {
+		t.Errorf("counter:list list status = %d, want 200", status)
+	}
+	if status := request(listCredential.APIKey, "/tenants/"+tenantID+"/counters/"+counterID); status != fasthttp.StatusForbidden {
+		t.Errorf("counter:list GET status = %d, want 403", status)
 	}
 }
 

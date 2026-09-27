@@ -15,6 +15,7 @@ import (
 const (
 	ScopeTenantRead       = "tenant:read"
 	ScopeCounterRead      = "counter:read"
+	ScopeCounterList      = "counter:list"
 	ScopeCounterCreate    = "counter:create"
 	ScopeCounterIncrement = "counter:increment"
 	ScopeCounterAdjust    = "counter:adjust"
@@ -76,6 +77,7 @@ func (a *APIKeyAuthenticator) Authenticate(ctx context.Context, apiKey string) (
 			Scopes: []string{
 				ScopeTenantRead,
 				ScopeCounterRead,
+				ScopeCounterList,
 				ScopeCounterCreate,
 				ScopeCounterIncrement,
 				ScopeCounterAdjust,

@@ -16,6 +16,7 @@ backward-compatible clients.
 - [V2 API contract](docs/api-v2.md) — primary reference for new integrations.
 - [V1 API reference](docs/api.md) — legacy, backward-compatible routes.
 - [HTML API reference](docs/api.html) — generated endpoint overview.
+- Run the server and open `/tools/curl` for a browser-only curl command builder.
 - [Environment variables](.env.example) — configuration names and defaults.
 - [Deployment guide](docs/deployment.md) — migrations, systemd, health checks,
   optional Redis, and production operations.

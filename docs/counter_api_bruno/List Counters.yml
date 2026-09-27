@@ -36,7 +36,7 @@ docs: |-
 
   Lists all counters belonging to a tenant with cursor-based pagination.
 
-  **Authentication:** Requires API key via X-Api-Key header
+  **Authentication:** Requires an administrator key or a tenant key with the `counter:list` scope.
 
   **Rate Limit:** 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)
 

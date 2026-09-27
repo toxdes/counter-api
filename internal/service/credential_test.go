@@ -112,3 +112,26 @@ func TestCredentialServiceCreatesAdministratorCredential(t *testing.T) {
 		t.Fatalf("created response/audit = %#v/%#v", created, repository.audits)
 	}
 }
+
+func TestCredentialServiceAllowsCounterListAndKeepsItOutOfDefaultScopes(t *testing.T) {
+	repository := &fakeCredentialRepository{}
+	credentialService := NewCredentialService(repository)
+
+	defaultCredential, err := credentialService.Create(context.Background(), "tenant-a", nil, nil, "admin")
+	if err != nil {
+		t.Fatalf("Create(default scopes) failed: %v", err)
+	}
+	for _, scope := range defaultCredential.Scopes {
+		if scope == "counter:list" {
+			t.Fatal("counter:list must not be granted by default")
+		}
+	}
+
+	listCredential, err := credentialService.Create(context.Background(), "tenant-a", []string{"counter:list"}, nil, "admin")
+	if err != nil {
+		t.Fatalf("Create(counter:list) failed: %v", err)
+	}
+	if len(listCredential.Scopes) != 1 || listCredential.Scopes[0] != "counter:list" {
+		t.Fatalf("scopes = %#v, want only counter:list", listCredential.Scopes)
+	}
+}

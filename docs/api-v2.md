@@ -26,15 +26,17 @@ key remains accepted during migration. Tenant-scoped keys use the format
 `ck_{credential_id}.{secret}` and are returned only once when created.
 
 Tenant-scoped credentials are authorized by both their tenant and their action
-scopes. Supported scopes are `tenant:read`, `counter:read`,
+scopes. Supported scopes are `tenant:read`, `counter:read`, `counter:list`,
 `counter:create`, `counter:increment`, `counter:adjust`, and
-`counter:history`.
+`counter:history`. `counter:read` permits reading one counter by ID;
+`counter:list` separately permits enumerating a tenant's counters and is not
+included in the default tenant credential scopes.
 
 Creating a tenant or managing credentials requires an administrator key. A
 tenant credential can create counters only when explicitly granted
 `counter:create`; that endpoint is currently the compatible V1 route
 `POST /tenants/{tenant_id}/counters`. The default tenant credential scopes do
-not include `counter:create` or `counter:adjust`.
+not include `counter:list`, `counter:create`, or `counter:adjust`.
 
 ## Get Counter
 
@@ -204,7 +206,7 @@ X-API-Key: administrator-key
 Content-Type: application/json
 
 {
-  "scopes": ["counter:read", "counter:create", "counter:increment", "counter:adjust", "counter:history"]
+  "scopes": ["counter:read", "counter:list", "counter:create", "counter:increment", "counter:adjust", "counter:history"]
 }
 ```
 
@@ -253,25 +255,33 @@ been distributed to administrators and verified.
 
 ## Migrating from V1
 
-V1 is not removed or changed by enabling V2. Existing unversioned clients can
-continue using their current routes while clients migrate independently.
+V1 route paths and response formats remain available while clients migrate.
+Tenant credentials now need `counter:read` for single-counter reads and
+`counter:list` for tenant counter enumeration.
 
 | V1 route | V2 route or migration action |
 |---|---|
 | `POST /tenants` | Keep using it with an administrator key; tenant creation has no V2 replacement yet. |
 | `POST /tenants/{tenant_id}/counters` | Keep using it; grant a tenant key `counter:create` when delegated counter creation is needed. |
-| `GET /tenants/{tenant_id}/counters/{counter_id}` | `GET /v2/tenants/{tenant_id}/counters/{counter_id}` with `counter:read`. |
+| `GET /tenants/{tenant_id}/counters` | Keep using it with an administrator key or a tenant key granted `counter:list`. |
+| `GET /tenants/{tenant_id}/counters/{counter_id}` | Keep using it with `counter:read`, or use `GET /v2/tenants/{tenant_id}/counters/{counter_id}` with `counter:read`. |
 | `POST /tenants/{tenant_id}/counters/{counter_id}/inc` | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/inc` with `counter:increment` and a required `Idempotency-Key`. |
 | `POST /tenants/{tenant_id}/counters/{counter_id}/set` | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/set` with `counter:adjust` and a required `Idempotency-Key`. |
 | No V1 equivalent | `GET /v2/tenants/{tenant_id}/counters/{counter_id}/operations` with `counter:history`. |
+
+Credentials are not upgraded automatically. An existing credential with
+`counter:read` can continue reading individual counters, but needs to be
+replaced by a newly created credential with `counter:list` to enumerate
+counters.
 
 The recommended migration sequence is:
 
 1. Keep the legacy administrator key enabled and use it to create an
    administrator credential or tenant-scoped credentials.
 2. Grant each tenant credential only the scopes it needs. Include
-   `counter:create` or `counter:adjust` explicitly; they are not default
-   scopes.
+   `counter:list`, `counter:create`, or `counter:adjust` explicitly when
+   needed; they are not default scopes. Create a new credential with
+   `counter:list` if an existing credential needs list access.
 3. Migrate reads first, then mutations. For every V2 mutation, generate one
    UUID idempotency key per logical operation and reuse it for retries.
 4. Verify operation history and replay behavior in a staging environment,

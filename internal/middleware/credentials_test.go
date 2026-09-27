@@ -63,3 +63,20 @@ func TestPrincipalAuthorizationIsTenantAndScopeBound(t *testing.T) {
 		t.Fatal("admin should authorize privileged scopes")
 	}
 }
+
+func TestCounterReadAndListScopesAreIndependent(t *testing.T) {
+	readOnly := Principal{TenantID: "tenant-a", Scopes: []string{ScopeCounterRead}}
+	listOnly := Principal{TenantID: "tenant-a", Scopes: []string{ScopeCounterList}}
+	if !PrincipalAuthorized(readOnly, "tenant-a", ScopeCounterRead) {
+		t.Fatal("counter:read should authorize a single-counter read")
+	}
+	if PrincipalAuthorized(readOnly, "tenant-a", ScopeCounterList) {
+		t.Fatal("counter:read must not authorize tenant counter listing")
+	}
+	if !PrincipalAuthorized(listOnly, "tenant-a", ScopeCounterList) {
+		t.Fatal("counter:list should authorize tenant counter listing")
+	}
+	if PrincipalAuthorized(listOnly, "tenant-a", ScopeCounterRead) {
+		t.Fatal("counter:list must not authorize a single-counter read")
+	}
+}

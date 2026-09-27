@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>cURL tool · Counter API</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #ede7de;
+      --muted: #a8b5a8;
+      --line: #3d4748;
+      --ground: #181828;
+      --surface: #182121;
+      --surface-raised: #1d2729;
+      --accent: #e99957;
+      --accent-hover: #f1ae61;
+      --code: #111719;
+      --focus: #e9a36c;
+      font-family: "Inter", system-ui, sans-serif;
+      font-size: 16px;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--ground); scroll-behavior: smooth; scrollbar-color: #566263 var(--ground); }
+    body { margin: 0; background: var(--ground); color: var(--ink); font-size: 1rem; line-height: 1.5; caret-color: var(--accent); }
+    ::selection { color: var(--ground); background: var(--accent); }
+    a { color: var(--accent-hover); text-underline-offset: 4px; }
+    a:hover { color: var(--ink); }
+    .topbar { min-height: 68px; background: var(--ground); }
+    .topbar-inner, main { width: min(1399px, calc(100% - 64px)); margin: 0 auto; }
+    .topbar-inner { min-height: 68px; padding: 8px 0 12px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
+    .brand { color: var(--ink); font-size: 1.2rem; font-weight: 700; letter-spacing: -.025em; text-decoration: none; }
+    .topbar a:not(.brand) { color: var(--muted); padding: 10px 12px; font-size: 1rem; font-weight: 600; text-decoration: none; }
+    main { padding: 35px 0 64px; }
+    h1 { max-width: 18ch; margin: 0; font-size: clamp(2.5rem, 3.55vw, 3.3rem); line-height: 1.2; letter-spacing: -.035em; font-weight: 700; }
+    .intro { max-width: 68ch; margin: 14px 0 22px; color: var(--muted); font-size: 1rem; line-height: 1.6; }
+    .origin { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 24px; padding: 16px 28px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+    label { display: block; margin-bottom: 7px; font-size: 1.05rem; font-weight: 500; }
+    .origin label { margin-bottom: 10px; font-size: 1.18rem; line-height: 1.7; }
+    input[type="text"], input[type="url"], input[type="number"], input[type="password"] {
+      width: 100%; min-height: 52px; padding: 10px 14px; border: 1px solid #5b6665; border-radius: 4px;
+      background: #1e2b2b; color: var(--ink); font: inherit; font-size: 1.1rem; line-height: 1.4;
+    }
+    input:focus-visible, button:focus-visible, a:focus-visible {
+      outline: 2px solid var(--focus); outline-offset: 3px;
+    }
+    .hint, .description { margin: 6px 0 0; color: var(--muted); font-size: .86rem; }
+    .secret-note { margin: 6px 0 0; color: var(--muted); font-size: .86rem; }
+    .flow { margin-top: 16px; border: 1px solid var(--line); border-radius: 5px; }
+    .step { display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; margin: 0; padding: 32px 32px 36px; border: 0; border-radius: 0; background: transparent; }
+    .step + .step { border-top: 1px solid var(--line); }
+    .step:focus-within { background: rgba(255,255,255,.012); }
+    .step-title { display: flex; gap: 16px; align-items: center; }
+    .step-number { flex: 0 0 60px; width: 60px; height: 60px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--ground); font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    h2 { margin: 0; font-size: 1.9rem; line-height: 1.2; letter-spacing: -.02em; font-weight: 650; }
+    .step-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 22px 24px; margin-top: 18px; }
+    .step[aria-labelledby="tenant-title"] .step-fields > div:first-child { max-width: 692px; }
+    .step-fields > .field-row { grid-column: 1 / -1; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    legend { margin-bottom: 8px; font-size: .88rem; font-weight: 650; }
+    .scope-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 18px; }
+    .scope-option { display: flex; align-items: center; gap: 9px; color: var(--ink); font-size: .9rem; }
+    .scope-option input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); }
+    .code-wrap { min-width: 0; padding: 16px; border: 1px solid #303a3c; border-radius: 4px; background: #182121; }
+    .code-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
+    .command-label { margin: 0; font-size: .9rem; font-weight: 600; }
+    .command-text { display: block; margin: 0; padding: 14px 16px; overflow: auto; border: 1px solid #303a3c; border-radius: 3px; background: var(--code); color: #e4e6e8; font: 1rem/1.65 "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace; tab-size: 2; white-space: pre; }
+    .copy { min-width: 52px; min-height: 36px; padding: 6px 10px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--accent-hover); font: inherit; font-size: .86rem; font-weight: 600; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; }
+    .copy:hover { background: var(--surface-raised); color: var(--ink); }
+    .copy:active { background: #263231; }
+    .status { margin: 10px 0 0; color: var(--muted); font-size: .86rem; }
+    .status:empty { display: none; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    .warning { margin: 10px 0 0; color: #f0bd82; font-size: .88rem; }
+    footer { max-width: 82ch; padding-top: 12px; color: var(--muted); font-size: .86rem; }
+    .step:nth-of-type(2) .step-number { background: #647268; color: var(--ground); font-size: 1.2rem; }
+    @media (max-width: 780px) {
+      .topbar-inner, main { width: min(100% - 32px, 600px); }
+      main { padding-top: 32px; }
+      .origin, .step-fields { grid-template-columns: 1fr; }
+      .origin label { font-size: 1.05rem; line-height: 1.5; }
+      .step-fields > .field-row { grid-column: auto; }
+      .step[aria-labelledby="tenant-title"] .step-fields > div:first-child { max-width: none; }
+      .step { gap: 24px; padding: 28px 22px 30px; }
+      h1 { font-size: clamp(2.25rem, 8vw, 3rem); }
+    }
+    @media (max-width: 480px) {
+      .field-row, .scope-list { grid-template-columns: 1fr; }
+      .topbar-inner { min-height: 60px; }
+      .topbar a:not(.brand) { font-size: .82rem; }
+      .origin { padding: 18px; }
+      .step-number { flex-basis: 46px; width: 46px; height: 46px; }
+      h2 { font-size: 1.45rem; }
+      .command-text { padding: 12px; font-size: .88rem; }
+      .copy { min-width: 44px; min-height: 44px; padding: 6px 10px; }
+    }
+    @media (pointer: coarse) { .copy { min-height: 44px; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">Counter API</a>
+      <a href="/" aria-label="Back to documentation">Docs</a>
+    </div>
+  </div>
+  <main>
+    <h1>cURL tool</h1>
+    <p class="intro">Generate cURL commands for commonly used APIs. This is a local-browser-only tool that runs in your browser.</p>
+
+    <div class="origin">
+      <div>
+        <label for="base-url">API base URL</label>
+        <input id="base-url" type="url" autocomplete="url" spellcheck="false">
+        <p class="hint">Use the public API origin, without a trailing slash.</p>
+      </div>
+      <div>
+        <label for="api-key">API Key</label>
+        <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="Administrator API key">
+        <p class="secret-note">Used for steps 1–2. It stays in this page, but appears in the generated command and clipboard.</p>
+      </div>
+    </div>
+
+    <div class="flow">
+      <section class="step" aria-labelledby="tenant-title">
+        <div>
+          <div class="step-title"><span class="step-number" aria-hidden="true">1</span><div><h2 id="tenant-title">Create a tenant</h2><p class="description">Uses your administrator key. Copy the returned <code>tenant_id</code> for the next step.</p></div></div>
+          <div class="step-fields">
+            <div><label for="tenant-label">Tenant label</label><input id="tenant-label" type="text" value="my-tenant" autocomplete="off"></div>
+          </div>
+        </div>
+        <div class="code-wrap">
+          <div class="code-heading"><span class="command-label" id="tenant-command-label">Generated command</span><button class="copy" type="button" data-copy="tenant-command" aria-label="Copy create-tenant command"><span class="copy-label">Copy</span></button></div>
+          <pre class="command-text" aria-labelledby="tenant-command-label"><code id="tenant-command"></code></pre>
+          <span class="sr-only" id="tenant-copy-live" aria-live="polite"></span>
+          <p class="status" id="tenant-status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="step" aria-labelledby="credential-title">
+        <div>
+          <div class="step-title"><span class="step-number" aria-hidden="true">2</span><div><h2 id="credential-title">Create a tenant key</h2><p class="description">Requires the administrator key. The new key is returned once; save it securely.</p></div></div>
+          <div class="step-fields">
+            <div><label for="credential-tenant-id">Tenant ID</label><input id="credential-tenant-id" type="text" placeholder="Paste tenant_id from step 1" autocomplete="off" spellcheck="false"></div>
+            <fieldset>
+              <legend>Grant scopes</legend>
+              <div class="scope-list">
+                <label class="scope-option"><input type="checkbox" name="scope" value="tenant:read"> <code>tenant:read</code></label>
+                <label class="scope-option"><input type="checkbox" name="scope" value="counter:read" checked> <code>counter:read</code></label>
+                <label class="scope-option"><input type="checkbox" name="scope" value="counter:list"> <code>counter:list</code></label>
+                <label class="scope-option"><input type="checkbox" name="scope" value="counter:create" checked> <code>counter:create</code></label>
+                <label class="scope-option"><input type="checkbox" name="scope" value="counter:increment" checked> <code>counter:increment</code></label>
+                <label class="scope-option"><input type="checkbox" name="scope" value="counter:adjust"> <code>counter:adjust</code></label>
+                <label class="scope-option"><input type="checkbox" name="scope" value="counter:history" checked> <code>counter:history</code></label>
+              </div>
+              <p class="hint">The default set is read, increment, and history. Listing exposes the tenant’s counter inventory, so grant <code>counter:list</code> only when needed. Leaving every scope unchecked uses the default set.</p>
+            </fieldset>
+          </div>
+        </div>
+        <div class="code-wrap">
+          <div class="code-heading"><span class="command-label" id="credential-command-label">Generated command</span><button class="copy" type="button" data-copy="credential-command" aria-label="Copy credential command"><span class="copy-label">Copy</span></button></div>
+          <pre class="command-text" aria-labelledby="credential-command-label"><code id="credential-command"></code></pre>
+          <span class="sr-only" id="credential-copy-live" aria-live="polite"></span>
+          <p class="status" id="credential-status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="step" aria-labelledby="counter-title">
+        <div>
+          <div class="step-title"><span class="step-number" aria-hidden="true">3</span><div><h2 id="counter-title">Create a counter</h2><p class="description">Uses a tenant key with <code>counter:create</code> for this tenant.</p></div></div>
+          <div class="step-fields">
+            <div><label for="counter-tenant-id">Tenant ID</label><input id="counter-tenant-id" type="text" placeholder="Paste tenant_id from step 1" autocomplete="off" spellcheck="false"></div>
+            <div><label for="tenant-api-key">Tenant API Key</label><input id="tenant-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="Tenant key with counter:create"></div>
+            <div class="field-row">
+              <div><label for="counter-label">Counter label</label><input id="counter-label" type="text" value="daily-steps" autocomplete="off"></div>
+              <div><label for="initial-value">Initial value <span class="hint">(optional)</span></label><input id="initial-value" type="text" inputmode="numeric" placeholder="Leave blank for 0" autocomplete="off" spellcheck="false"></div>
+            </div>
+          </div>
+        </div>
+        <div class="code-wrap">
+          <div class="code-heading"><span class="command-label" id="counter-command-label">Generated command</span><button class="copy" type="button" data-copy="counter-command" aria-label="Copy create-counter command"><span class="copy-label">Copy</span></button></div>
+          <pre class="command-text" aria-labelledby="counter-command-label"><code id="counter-command"></code></pre>
+          <span class="sr-only" id="counter-copy-live" aria-live="polite"></span>
+          <p class="warning" id="counter-warning" hidden>The selected tenant key needs permission to create counters.</p>
+          <p class="status" id="counter-status" aria-live="polite"></p>
+        </div>
+      </section>
+    </div>
+
+    <footer>Tenant and credential IDs are copied manually from each JSON response. Commands contain the API key you entered; avoid sharing them or saving them in shell history.</footer>
+  </main>
+
+  <script>
+    (() => {
+      const byId = (id) => document.getElementById(id);
+      const baseUrl = byId("base-url");
+      const pageOrigin = window.location.origin;
+      baseUrl.value = pageOrigin && pageOrigin !== "null" && window.location.protocol !== "file:" ? pageOrigin : "https://api.example.com";
+
+      const shellQuote = (value) => "'" + String(value).replace(/'/g, "'\\''") + "'";
+      const curl = (url, apiKey, body) => [
+        "curl --silent --show-error -X POST " + shellQuote(url) + " \\",
+        "  --header " + shellQuote("X-API-Key: " + apiKey) + " \\",
+        "  --header 'Content-Type: application/json' \\",
+        "  --data-raw " + shellQuote(JSON.stringify(body, null, 2))
+      ].join("\n");
+      const origin = () => baseUrl.value.trim().replace(/\/+$/, "");
+      const selectedScopes = () => Array.from(document.querySelectorAll('input[name="scope"]:checked')).map((input) => input.value);
+      const refresh = () => {
+        const root = origin();
+        const tenantLabel = byId("tenant-label").value;
+        const apiKey = byId("api-key").value;
+        byId("tenant-command").textContent = curl(root + "/tenants", apiKey, { label: tenantLabel });
+
+        const tenantId = byId("credential-tenant-id").value.trim();
+        const credentialBody = {};
+        const scopes = selectedScopes();
+        if (scopes.length) credentialBody.scopes = scopes;
+        byId("credential-command").textContent = curl(root + "/v2/tenants/" + encodeURIComponent(tenantId) + "/credentials", apiKey, credentialBody);
+
+        const counterTenantId = byId("counter-tenant-id").value.trim();
+        const counterBody = { label: byId("counter-label").value };
+        const initialValue = byId("initial-value").value.trim();
+        if (initialValue !== "") {
+          try {
+            const value = BigInt(initialValue);
+            if (!/^-?(0|[1-9][0-9]*)$/.test(initialValue) || value < -9223372036854775808n || value > 9223372036854775807n) throw new Error("invalid int64");
+            const jsonBody = '{\n  "label": ' + JSON.stringify(counterBody.label) + ',\n  "initial_value": ' + initialValue + '\n}';
+            byId("counter-command").textContent = curlWithRawJSON(root + "/tenants/" + encodeURIComponent(counterTenantId) + "/counters", byId("tenant-api-key").value, jsonBody);
+            byId("counter-status").textContent = "";
+          } catch (_) {
+            byId("counter-status").textContent = "Initial value must be a whole number in the signed 64-bit range.";
+            byId("counter-command").textContent = "Correct the initial value to generate this command.";
+          }
+        } else {
+          byId("counter-command").textContent = curl(root + "/tenants/" + encodeURIComponent(counterTenantId) + "/counters", byId("tenant-api-key").value, counterBody);
+          byId("counter-status").textContent = "";
+        }
+        byId("counter-warning").hidden = scopes.includes("counter:create");
+      };
+      const curlWithRawJSON = (url, apiKey, rawJSON) => [
+        "curl --silent --show-error -X POST " + shellQuote(url) + " \\",
+        "  --header " + shellQuote("X-API-Key: " + apiKey) + " \\",
+        "  --header 'Content-Type: application/json' \\",
+        "  --data-raw " + shellQuote(rawJSON)
+      ].join("\n");
+
+      document.querySelectorAll("input").forEach((input) => input.addEventListener("input", refresh));
+      document.querySelectorAll("input[type=checkbox]").forEach((input) => input.addEventListener("change", refresh));
+      const copyTimers = new WeakMap();
+      document.querySelectorAll("button[data-copy]").forEach((button) => button.addEventListener("click", async () => {
+        const command = byId(button.dataset.copy);
+        const stepName = button.dataset.copy.replace("-command", "");
+        const status = byId(stepName + "-status");
+        const live = byId(stepName + "-copy-live");
+        window.clearTimeout(copyTimers.get(button));
+        button.querySelector(".copy-label").textContent = "Copy";
+        live.textContent = "";
+        try {
+          await navigator.clipboard.writeText(command.textContent);
+          button.querySelector(".copy-label").textContent = "Copied!";
+          live.textContent = "Copied!";
+          if (status) status.textContent = "";
+          copyTimers.set(button, window.setTimeout(() => {
+            button.querySelector(".copy-label").textContent = "Copy";
+            live.textContent = "";
+          }, 3000));
+        } catch (_) {
+          const range = document.createRange();
+          range.selectNodeContents(command);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          if (status) status.textContent = "Clipboard access is unavailable. The command is selected so you can copy it manually.";
+        }
+      }));
+      refresh();
+    })();
+  </script>
+</body>
+</html>

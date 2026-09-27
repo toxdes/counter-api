@@ -3,224 +3,214 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Counter API Documentation</title>
+    <meta name="theme-color" content="#181828">
+    <title>Counter API · Documentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }
-        header h1 { font-size: 2.5em; margin-bottom: 10px; }
-        header p { opacity: 0.9; font-size: 1.1em; }
-        .toc { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 30px 0; }
-        .toc h2 { margin-bottom: 15px; color: #667eea; }
-        .toc ul { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
-        .toc li { padding: 8px 12px; background: white; border-radius: 4px; border-left: 3px solid #667eea; }
-        .toc a { text-decoration: none; color: #333; display: flex; align-items: center; gap: 10px; }
-        .toc a:hover { color: #667eea; }
-        .method { font-weight: bold; padding: 2px 8px; border-radius: 3px; font-size: 0.85em; color: white; }
-        .method.GET { background: #61affe; }
-        .method.POST { background: #49cc90; }
-        .method.PUT { background: #fca130; }
-        .method.DELETE { background: #f93e3e; }
-        .endpoint { margin: 40px 0; padding: 30px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .endpoint-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #f0f0f0; }
-        .endpoint-title { font-size: 1.8em; color: #333; }
-        .endpoint-url { font-family: 'Monaco', 'Menlo', monospace; background: #f4f4f4; padding: 10px 15px; border-radius: 4px; margin: 15px 0; font-size: 0.95em; color: #e83e8c; }
-        .endpoint-content h3 { color: #667eea; margin: 25px 0 15px 0; font-size: 1.3em; }
-        .endpoint-content h4 { color: #49cc90; margin: 20px 0 10px 0; font-size: 1.1em; }
-        .endpoint-content p { margin: 10px 0; }
-        .endpoint-content ul { margin: 10px 0 10px 25px; }
-        .endpoint-content li { margin: 8px 0; }
-        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.9em; }
-        pre { background: #2d2d2d; color: #f8f8f2; padding: 20px; border-radius: 6px; overflow-x: auto; margin: 15px 0; }
-        pre code { background: transparent; padding: 0; color: inherit; }
-        .auth-box { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 15px 0; }
-        .rate-limit-box { background: #d1ecf1; border-left: 4px solid #17a2b8; padding: 15px; margin: 15px 0; }
-        .error-box { background: #f8d7da; border-left: 4px solid #dc3545; padding: 15px; margin: 15px 0; }
-        @media (max-width: 768px) {
-            .toc ul { grid-template-columns: 1fr; }
-            .endpoint-header { flex-direction: column; align-items: flex-start; }
+        :root { color-scheme:dark; --ink:#ede7de; --muted:#a8b5a8; --line:#3d4748; --ground:#181828; --panel:#182121; --accent:#e99957; --accent-hover:#f1ae61; --code:#111719; font-family:"Inter",system-ui,sans-serif; font-size:16px; }
+        * { box-sizing:border-box; } html { background:var(--ground); scroll-behavior:smooth; }
+        body { margin:0; background:var(--ground); color:var(--ink); font-size:1rem; line-height:1.6; }
+        a { color:var(--accent-hover); text-underline-offset:4px; } a:hover { color:var(--ink); }
+        a:focus-visible,summary:focus-visible { outline:2px solid #e9a36c; outline-offset:4px; }
+        .topbar { }
+        .topbar-inner,main { width:min(1180px,calc(100% - 64px)); margin:auto; }
+        .topbar-inner { min-height:68px; padding:8px 0 12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+        .brand { color:var(--ink); font-weight:700; font-size:1.2rem; text-decoration:none; letter-spacing:-.03em; }
+        .topbar nav { display:flex; gap:24px; } .topbar nav a { color:var(--muted); font-size:.92rem; }
+        main { padding:62px 0 90px; } .hero { max-width:760px; padding-bottom:40px; }
+        h1 { max-width:19ch; margin:0; font-size:clamp(2.5rem,3.55vw,3.3rem); line-height:1.2; letter-spacing:-.035em; }
+        .lead { max-width:68ch; margin:14px 0 0; color:var(--muted); font-size:1rem; line-height:1.6; }
+        .hero-actions { display:flex; align-items:center; flex-wrap:wrap; gap:22px; margin-top:24px; }
+        .primary-link { display:inline-flex; min-height:46px; align-items:center; padding:0 17px; border-radius:4px; color:#191a20; background:var(--accent); font-weight:700; text-decoration:none; }
+        .primary-link:hover { color:#191a20; background:var(--accent-hover); }
+        .security { display:flex; gap:22px; flex-wrap:wrap; border-block:1px solid var(--line); padding:18px 0; color:var(--muted); font-size:.92rem; }
+        .security strong { color:var(--ink); }
+        .section-heading { display:flex; justify-content:space-between; align-items:baseline; gap:20px; margin:54px 0 22px; }
+        h2 { margin:0; font-size:1.5rem; letter-spacing:-.025em; }
+        .reference-layout { display:grid; grid-template-columns:210px minmax(0,1fr); align-items:start; gap:42px; }
+        .toc { position:sticky; top:24px; display:grid; gap:3px; max-height:calc(100vh - 48px); overflow-y:auto; padding:0 0 8px; scrollbar-color:#566263 var(--ground); }
+        .toc a { display:flex; align-items:center; min-height:40px; padding:7px 12px; border-left:2px solid transparent; color:var(--muted); font-size:.9rem; line-height:1.35; text-decoration:none; }
+        .toc a:hover { color:var(--ink); }
+        .toc a[aria-current="location"] { border-color:var(--accent); color:var(--ink); }
+        .endpoint-list { min-width:0; }
+        .endpoint { border-top:1px solid var(--line); padding:20px 0 24px; scroll-margin-top:24px; }
+        .endpoint-header { display:flex; align-items:center; gap:13px; }
+        .method { min-width:55px; color:var(--accent); font:700 .78rem/1 "JetBrains Mono",monospace; letter-spacing:.04em; }
+        .endpoint-title { font-size:1.16rem; font-weight:650; }
+        .endpoint-url { margin:8px 0 12px; overflow-wrap:anywhere; color:#d8c9b8; font:.9rem/1.6 "JetBrains Mono",monospace; }
+        .endpoint-content { max-width:850px; color:var(--muted); font-size:1rem; }
+        .endpoint-content h3,.endpoint-content h4 { margin:16px 0 8px; color:var(--ink); font-size:1rem; }
+        .endpoint-content p { margin:8px 0; } .endpoint-content ul { margin:8px 0; padding-left:22px; }
+        .endpoint-content li { margin:4px 0; } code,pre { font-family:"JetBrains Mono",monospace; }
+        code { color:#e8c49f; font-size:.88em; }
+        pre { margin:12px 0; padding:15px 17px; overflow:auto; border:1px solid #303a3c; border-radius:4px; background:var(--code); color:#e4e6e8; font-size:.86rem; line-height:1.6; }
+        pre code { color:inherit; } .auth-box,.rate-limit-box { margin:12px 0; padding:10px 13px; border-left:2px solid var(--accent); background:var(--panel); color:var(--ink); }
+        .error-box { margin:8px 0; color:var(--muted); }
+        .api-table-wrap { margin:8px 0 16px; overflow-x:auto; }
+        .api-table { width:100%; border-collapse:collapse; font-size:.92rem; line-height:1.5; }
+        .api-table th,.api-table td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+        .api-table th { color:var(--ink); background:var(--panel); font-size:.8rem; font-weight:600; letter-spacing:.025em; }
+        .api-table td:first-child { width:150px; color:var(--ink); }
+        .api-table td:nth-child(2) { width:190px; overflow-wrap:anywhere; }
+        .api-sample { margin:8px 0 16px; }
+        details.full-reference { margin-top:42px; border-top:1px solid var(--line); padding-top:18px; }
+        details summary { width:max-content; cursor:pointer; color:var(--ink); font-weight:600; }
+        footer { margin-top:46px; color:var(--muted); font-size:.86rem; }
+        @media(max-width:760px) {
+          .topbar-inner,main { width:min(100% - 36px,600px); } main { padding-top:40px; } .topbar-inner { min-height:60px; } .topbar nav { gap:14px; } .security { gap:10px 18px; }
+          h1 { font-size:clamp(2.25rem,8vw,3rem); line-height:1.2; } .section-heading { margin:42px 0 14px; }
+          .reference-layout { display:block; }
+          .toc { z-index:5; display:flex; gap:6px; max-height:none; margin:0 calc((100vw - min(100vw - 36px,600px)) / -2); padding:8px 18px; overflow-x:auto; overflow-y:hidden; border-bottom:1px solid var(--line); background:var(--ground); scrollbar-width:none; }
+          .toc::-webkit-scrollbar { display:none; }
+          .toc a { flex:0 0 auto; min-height:44px; padding:8px 12px; border:0; border-radius:3px; white-space:nowrap; }
+          .toc a[aria-current="location"] { background:var(--panel); color:var(--ink); }
+          .endpoint-list { padding-top:8px; } .endpoint { scroll-margin-top:68px; }
         }
+        @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
     </style>
 </head>
 <body>
-    <header>
-        <h1>Counter API</h1>
-        <p>V2 is the recommended contract for new clients. Counter mutations require an Idempotency-Key and are recorded in durable operation history. Unversioned routes remain V1 for compatibility.</p>
-    </header>
-
-    <div class="container">
-        <div class="toc">
-            <h2>Table of Contents</h2>
-            <ul>
-                <li><a href="#create-tenant"><span class="method POST">POST</span> Create Tenant</a></li>
-                <li><a href="#get-counter"><span class="method GET">GET</span> Get Counter</a></li>
-                <li><a href="#get-tenant"><span class="method GET">GET</span> Get Tenant</a></li>
-                <li><a href="#create-counter"><span class="method POST">POST</span> Create Counter</a></li>
-                <li><a href="#increment-counter"><span class="method POST">POST</span> Increment Counter</a></li>
-                <li><a href="#set-counter"><span class="method POST">POST</span> Set Counter</a></li>
-                <li><a href="#list-counters"><span class="method GET">GET</span> List Counters</a></li>
-                <li><a href="#v2-get-counter"><span class="method GET">GET</span> V2 Get Counter</a></li>
-                <li><a href="#v2-increment-counter"><span class="method POST">POST</span> V2 Increment Counter</a></li>
-                <li><a href="#v2-set-counter"><span class="method POST">POST</span> V2 Set Counter</a></li>
-                <li><a href="#v2-operation-history"><span class="method GET">GET</span> V2 Operation History</a></li>
-            </ul>
-        </div>
-        <div class="endpoint" id="create-tenant">
+    <div class="topbar"><div class="topbar-inner"><a class="brand" href="/">Counter API</a><nav aria-label="Main navigation"><a href="#endpoints">API reference</a><a href="/tools/curl">Command builder</a></nav></div></div>
+    <main>
+        <section class="hero" aria-labelledby="page-title"><h1 id="page-title">A small counter API. Built to be dependable.</h1>
+        <p class="lead">Create counters, read their current values, and keep a durable record of each change.</p>
+        <div class="hero-actions"><a class="primary-link" href="/tools/curl">Build setup commands <span aria-hidden="true">&nbsp;→</span></a><a href="#endpoints">Browse endpoints</a></div></section>
+        <div class="security" aria-label="API guarantees"><span><strong>Scoped keys</strong> for tenant access</span><span><strong>Idempotent changes</strong> safe to retry</span><span><strong>Operation history</strong> records each mutation</span></div>
+        <section id="endpoints" aria-labelledby="endpoint-heading"><div class="section-heading"><h2 id="endpoint-heading">API reference</h2></div>
+        <div class="reference-layout">
+        <nav class="toc" aria-label="Endpoints">
+<a href="#create-tenant">Create Tenant</a>
+<a href="#create-credential">Create Credential</a>
+<a href="#create-counter">Create Counter</a>
+<a href="#get-counter">Get Counter</a>
+<a href="#increment-counter">Increment Counter</a>
+<a href="#set-counter">Set Counter</a>
+<a href="#operation-history">Operation History</a>
+</nav>
+<div class="endpoint-list">
+<article class="endpoint" id="create-tenant">
             <div class="endpoint-header">
-                <span class="method POST">POST</span>
-                <h2 class="endpoint-title">Create Tenant</h2>
+                <span class="method">POST</span>
+                <h3 class="endpoint-title">Create Tenant</h3>
             </div>
-            <div class="endpoint-url">{{BASE_URL}}/tenants</div>
+            <div class="endpoint-url"><code>POST {base_url}/tenants</code></div>
             <div class="endpoint-content">
-<h3>Create Tenant</h3>
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{ADMIN_API_KEY}}</code></td><td>Administrator key required.</td></tr>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>Request body is JSON.</td></tr>
+</tbody></table></div>
+<h4>Request body</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>label</code></td><td><code>&#34;production&#34;</code></td><td>Required and unique. 1–255 characters; letters, numbers, spaces, hyphens, underscores, and periods.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>JSON response body.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request POST &#34;$BASE_URL/tenants&#34; --header &#34;X-API-Key: $ADMIN_API_KEY&#34; --header &#34;Content-Type: application/json&#34; --data-raw &#39;{&#34;label&#34;:&#34;production&#34;}&#39;</code></pre>
+<h4>Sample response</h4>
+<pre class="api-sample"><code class="language-json">{
+  &#34;tenant_id&#34;: &#34;01912345-6789-7000-8000-000000000001&#34;,
+  &#34;label&#34;: &#34;production&#34;,
+  &#34;created_at&#34;: &#34;2026-09-25T08:00:00Z&#34;,
+  &#34;updated_at&#34;: &#34;2026-09-25T08:00:00Z&#34;
+}</code></pre>
 <p>Creates a new tenant with a unique label. Tenants act as isolated workspaces that contain counters.</p>
 <p><strong>Authentication:</strong> Requires API key via X-Api-Key header</p>
 <p><strong>Rate Limit:</strong> 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)</p>
-<h3>Request Body</h3>
-<pre><code>{
-  "label": "production"
-}
-</code></pre>
-<h4>Fields</h4>
-<ul>
-<li><code>label</code> (string, required): Unique identifier for the tenant</li>
-<li>Min: 1 character, Max: 255 characters</li>
-<li>Allowed: alphanumeric, spaces, hyphens, underscores, dots</li>
-<li>Must be unique across all tenants</li>
-</ul></div>
-<h3>Response (201 Created)</h3>
-<pre><code>{
-  "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
-  "label": "production",
-  "created_at": "2026-04-08T10:30:00Z",
-  "updated_at": "2026-04-08T10:30:00Z"
-}
-</code></pre>
 <h3>Errors</h3>
-<div class="error-box"><ul>
+<ul class="error-box">
 <li>400 INVALID_JSON - Invalid JSON in request body</li>
 <li>400 INVALID_PARAMETER - Label validation failed</li>
 <li>409 TENANT_LABEL_EXISTS - Label already in use</li>
 <li>401 UNAUTHORIZED - Missing or invalid API key</li>
 <li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
-</ul></div>
+</ul>
 
             </div>
-        </div>
-        <div class="endpoint" id="get-counter">
+        </article>
+<article class="endpoint" id="create-credential">
             <div class="endpoint-header">
-                <span class="method GET">GET</span>
-                <h2 class="endpoint-title">Get Counter</h2>
+                <span class="method">POST</span>
+                <h3 class="endpoint-title">Create Credential</h3>
             </div>
-            <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}/counters/{{counter_id}}</div>
+            <div class="endpoint-url"><code>POST {base_url}/v2/tenants/{tenant_id}/credentials</code></div>
             <div class="endpoint-content">
-<h3>Get Counter</h3>
-<p>Retrieves the current value and details of a specific counter.</p>
-<p><strong>Authentication:</strong> Requires a key with <code>counter:read</code> (administrator keys</p>
-<p>are also accepted).</p>
-<p>This is the legacy V1 route. New clients should use the equivalent V2 route,</p>
-<p>which uses the configured read-through cache.</p>
-<h3>URL Parameters</h3>
-<ul>
-<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
-<li><code>counter_id</code> (UUID, required): The unique identifier of the counter</li>
-</ul></div>
-<h3>Response (200 OK)</h3>
-<pre><code>{
-  "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
-  "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
-  "label": "page_views",
-  "value": 1523,
-  "created_at": "2026-04-08T10:30:00Z",
-  "updated_at": "2026-04-08T10:35:42Z"
-}
-</code></pre>
-<h3>Errors</h3>
-<div class="error-box"><ul>
-<li>400 INVALID_UUID - Invalid tenant_id or counter_id format</li>
-<li>404 COUNTER_NOT_FOUND - Counter does not exist</li>
-<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
-</ul></div>
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{ADMIN_API_KEY}}</code></td><td>Administrator key required to manage credentials.</td></tr>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>Request body is JSON.</td></tr>
+</tbody></table></div>
+<h4>Request body</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>scopes</code></td><td><code>[&#34;counter:read&#34;, &#34;counter:increment&#34;, &#34;counter:history&#34;]</code></td><td>Optional; supports <code>tenant:read</code>, <code>counter:read</code>, <code>counter:list</code>, <code>counter:create</code>, <code>counter:increment</code>, <code>counter:adjust</code>, and <code>counter:history</code>. Defaults to read, increment, and history; listing is not granted by default.</td></tr>
+<tr><td><code>expires_at</code></td><td><code>&#34;2026-12-31T23:59:59Z&#34;</code></td><td>Optional expiration timestamp; omitted for a non-expiring credential.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>JSON response body.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request POST &#34;$BASE_URL/v2/tenants/$TENANT_ID/credentials&#34; --header &#34;X-API-Key: $ADMIN_API_KEY&#34; --header &#34;Content-Type: application/json&#34; --data-raw &#39;{&#34;scopes&#34;:[&#34;counter:read&#34;,&#34;counter:increment&#34;,&#34;counter:history&#34;]}&#39;</code></pre>
+<h4>Sample response</h4>
+<pre class="api-sample"><code class="language-json">{
+  &#34;credential_id&#34;: &#34;01912345-6789-7000-8000-000000000010&#34;,
+  &#34;tenant_id&#34;: &#34;01912345-6789-7000-8000-000000000001&#34;,
+  &#34;api_key&#34;: &#34;ck_01912345-6789-7000-8000-000000000010.example-secret&#34;,
+  &#34;scopes&#34;: [
+    &#34;counter:read&#34;,
+    &#34;counter:increment&#34;,
+    &#34;counter:history&#34;
+  ]
+}</code></pre>
+<p>Creates a tenant-scoped key. Requires the administrator API key. The secret is returned once; store it securely. Supported scopes: <code>tenant:read</code>, <code>counter:read</code>, <code>counter:list</code>, <code>counter:create</code>, <code>counter:increment</code>, <code>counter:adjust</code>, and <code>counter:history</code>. By default, keys receive read, increment, and history scopes; listing, counter creation, and adjustment must be granted explicitly.</p>
 
             </div>
-        </div>
-        <div class="endpoint" id="get-tenant">
+        </article>
+<article class="endpoint" id="create-counter">
             <div class="endpoint-header">
-                <span class="method GET">GET</span>
-                <h2 class="endpoint-title">Get Tenant</h2>
+                <span class="method">POST</span>
+                <h3 class="endpoint-title">Create Counter</h3>
             </div>
-            <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}</div>
+            <div class="endpoint-url"><code>POST {base_url}/tenants/{tenant_id}/counters</code></div>
             <div class="endpoint-content">
-<h3>Get Tenant</h3>
-<p>Retrieves tenant information by tenant ID.</p>
-<p><strong>Authentication:</strong> None required (public endpoint)</p>
-<p><strong>Rate Limit:</strong> 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)</p>
-<h3>URL Parameters</h3>
-<ul>
-<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
-</ul></div>
-<h3>Response (200 OK)</h3>
-<pre><code>{
-  "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
-  "label": "production",
-  "created_at": "2026-04-08T10:30:00Z",
-  "updated_at": "2026-04-08T10:30:00Z"
-}
-</code></pre>
-<h3>Errors</h3>
-<div class="error-box"><ul>
-<li>400 INVALID_UUID - Invalid tenant_id format</li>
-<li>404 TENANT_NOT_FOUND - Tenant does not exist</li>
-<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
-</ul></div>
-
-            </div>
-        </div>
-        <div class="endpoint" id="create-counter">
-            <div class="endpoint-header">
-                <span class="method POST">POST</span>
-                <h2 class="endpoint-title">Create Counter</h2>
-            </div>
-            <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}/counters</div>
-            <div class="endpoint-content">
-<h3>Create Counter</h3>
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{TENANT_API_KEY}}</code></td><td>Administrator key or tenant key with <code>counter:create</code>.</td></tr>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>Request body is JSON.</td></tr>
+</tbody></table></div>
+<h4>Request body</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>label</code></td><td><code>&#34;daily_steps&#34;</code></td><td>Optional; unique within this tenant, 1–255 characters.</td></tr>
+<tr><td><code>initial_value</code></td><td><code>0</code></td><td>Optional int64; defaults to 0.</td></tr>
+<tr><td><code>max_delta</code></td><td><code>50</code></td><td>Optional positive int64; defaults to 50 and must be at least 1.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>JSON response body.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request POST &#34;$BASE_URL/tenants/$TENANT_ID/counters&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34; --header &#34;Content-Type: application/json&#34; --data-raw &#39;{&#34;label&#34;:&#34;daily_steps&#34;,&#34;initial_value&#34;:0,&#34;max_delta&#34;:50}&#39;</code></pre>
+<h4>Sample response</h4>
+<pre class="api-sample"><code class="language-json">{
+  &#34;counter_id&#34;: &#34;01912345-6789-7000-8000-000000000002&#34;,
+  &#34;tenant_id&#34;: &#34;01912345-6789-7000-8000-000000000001&#34;,
+  &#34;label&#34;: &#34;daily_steps&#34;,
+  &#34;value&#34;: 0,
+  &#34;max_delta&#34;: 50,
+  &#34;created_at&#34;: &#34;2026-09-25T08:00:00Z&#34;,
+  &#34;updated_at&#34;: &#34;2026-09-25T08:00:00Z&#34;
+}</code></pre>
 <p>Creates a new counter under the specified tenant.</p>
 <p><strong>Authentication:</strong> Requires an administrator key or tenant-scoped key with</p>
 <p>the <code>counter:create</code> scope.</p>
 <p><strong>Rate Limit:</strong> 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)</p>
-<p>Counter creation currently remains on the V1 route for compatibility. New</p>
-<p>counter mutations and reads are documented under the V2 routes.</p>
-<h3>URL Parameters</h3>
-<ul>
-<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
-</ul></div>
-<h3>Request Body</h3>
-<pre><code>{
-  "label": "page_views",
-  "initial_value": 100
-}
-</code></pre>
-<h4>Fields</h4>
-<ul>
-<li><code>label</code> (string, optional): Counter label</li>
-<li>Min: 1 character, Max: 255 characters</li>
-<li>Must be unique within this tenant</li>
-<li><code>initial_value</code> (integer, optional): Starting value (default: 0)</li>
-<li>Range: int64 min to max</li>
-</ul></div>
-<h3>Response (201 Created)</h3>
-<pre><code>{
-  "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
-  "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
-  "label": "page_views",
-  "value": 100,
-  "created_at": "2026-04-08T10:30:00Z",
-  "updated_at": "2026-04-08T10:30:00Z"
-}
-</code></pre>
 <h3>Errors</h3>
-<div class="error-box"><ul>
+<ul class="error-box">
 <li>400 INVALID_JSON - Invalid JSON in request body</li>
 <li>400 INVALID_UUID - Invalid tenant_id format</li>
 <li>400 INVALID_PARAMETER - Parameter validation failed</li>
@@ -228,261 +218,197 @@
 <li>409 COUNTER_LABEL_EXISTS - Label already exists for this tenant</li>
 <li>401 UNAUTHORIZED - Missing or invalid API key</li>
 <li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
-</ul></div>
+</ul>
 
             </div>
-        </div>
-        <div class="endpoint" id="increment-counter">
+        </article>
+<article class="endpoint" id="get-counter">
             <div class="endpoint-header">
-                <span class="method POST">POST</span>
-                <h2 class="endpoint-title">Increment Counter</h2>
+                <span class="method">GET</span>
+                <h3 class="endpoint-title">Get Counter</h3>
             </div>
-            <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}/counters/{{counter_id}}/inc</div>
+            <div class="endpoint-url"><code>GET {base_url}/v2/tenants/{tenant_id}/counters/{counter_id}</code></div>
             <div class="endpoint-content">
-<h3>Increment Counter</h3>
-<p>Increments a counter value by a specified delta amount. Useful for tracking events like page views, clicks, or any countable metric.</p>
-<p><strong>Authentication:</strong> V1 keeps its existing route policy. New clients should</p>
-<p>use V2 with a <code>counter:increment</code> scoped key and required idempotency key.</p>
-<p><strong>Rate Limit:</strong> Controlled by the configured API rate limits.</p>
-<h3>URL Parameters</h3>
-<ul>
-<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
-<li><code>counter_id</code> (UUID, required): The unique identifier of the counter</li>
-</ul></div>
-<h3>Query Parameters</h3>
-<ul>
-<li><code>delta</code> (integer, optional): Amount to increment by (default: 1, must be positive)</li>
-<li>Example: <code>?delta=5</code> increments by 5</li>
-</ul></div>
-<h3>Headers</h3>
-<ul>
-<li><code>Idempotency-Key</code> (UUID, optional for V1): Reusing the same key and request returns the original result without applying the increment again</li>
-</ul></div>
-<h3>Response (200 OK)</h3>
-<pre><code>{
-  "operation_id": "01912345-6789-7000-8000-000000000003",
-  "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
-  "delta": 5,
-  "value": 1524,
-  "replayed": false,
-  "updated_at": "2026-04-08T10:35:50Z"
-}
-</code></pre>
-<h3>Errors</h3>
-<div class="error-box"><ul>
-<li>400 INVALID_UUID - Invalid tenant_id or counter_id format</li>
-<li>400 INVALID_DELTA - Delta parameter is not a positive integer</li>
-<li>404 COUNTER_NOT_FOUND - Counter does not exist</li>
-<li>400 COUNTER_OVERFLOW - Increment would cause integer overflow</li>
-<li>409 IDEMPOTENCY_KEY_REUSED - Idempotency key was reused with different request data</li>
-<li>409 OPERATION_IN_PROGRESS - The operation is already being completed</li>
-<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
-</ul></div>
-<h3>Examples</h3>
-<ul>
-<li>Increment by 1: <code>POST .../inc</code> (defaults to delta=1)</li>
-<li>Increment by 5: <code>POST .../inc?delta=5</code></li>
-<li>Increment by 10: <code>POST .../inc?delta=10</code></li>
-</ul></div>
-
-            </div>
-        </div>
-        <div class="endpoint" id="set-counter">
-            <div class="endpoint-header">
-                <span class="method POST">POST</span>
-                <h2 class="endpoint-title">Set Counter</h2>
-            </div>
-            <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}/counters/{{counter_id}}/set</div>
-            <div class="endpoint-content">
-<h3>Set Counter Value</h3>
-<p>Legacy V1 set route. New clients should use the V2 set route, which requires</p>
-<p>an idempotency key and records the adjustment in operation history.</p>
-<p><strong>Authentication:</strong> Requires API key via X-Api-Key header</p>
-<p><strong>Rate Limit:</strong> 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)</p>
-<h3>URL Parameters</h3>
-<ul>
-<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
-<li><code>counter_id</code> (UUID, required): The unique identifier of the counter</li>
-</ul></div>
-<h3>Request Body</h3>
-<pre><code>{
-  "value": 100
-}
-</code></pre>
-<h4>Fields</h4>
-<ul>
-<li><code>value</code> (integer, optional): The new value to set</li>
-<li>Range: int64 min to max</li>
-<li>If omitted, counter is set to 0</li>
-</ul></div>
-<h3>Response (200 OK)</h3>
-<pre><code>{
-  "operation_id": "01912345-6789-7000-8000-000000000004",
-  "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
-  "delta": 53,
-  "value": 100,
-  "replayed": false,
-  "updated_at": "2026-04-08T10:35:50Z"
-}
-</code></pre>
-<h3>Errors</h3>
-<div class="error-box"><ul>
-<li>400 INVALID_JSON - Invalid JSON in request body</li>
-<li>400 INVALID_UUID - Invalid tenant_id or counter_id format</li>
-<li>400 INVALID_VALUE - Value is out of valid range</li>
-<li>404 COUNTER_NOT_FOUND - Counter does not exist</li>
-<li>401 UNAUTHORIZED - Missing or invalid API key</li>
-<li>409 IDEMPOTENCY_KEY_REUSED - Idempotency key was reused with different request data</li>
-<li>409 OPERATION_IN_PROGRESS - The operation is already being completed</li>
-<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
-</ul></div>
-
-            </div>
-        </div>
-        <div class="endpoint" id="list-counters">
-            <div class="endpoint-header">
-                <span class="method GET">GET</span>
-                <h2 class="endpoint-title">List Counters</h2>
-            </div>
-            <div class="endpoint-url">{{BASE_URL}}/tenants/{{tenant_id}}/counters</div>
-            <div class="endpoint-content">
-<h3>List Counters</h3>
-<p>Lists all counters belonging to a tenant with cursor-based pagination.</p>
-<p><strong>Authentication:</strong> Requires API key via X-Api-Key header</p>
-<p><strong>Rate Limit:</strong> 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)</p>
-<h3>URL Parameters</h3>
-<ul>
-<li><code>tenant_id</code> (UUID, required): The unique identifier of the tenant</li>
-</ul></div>
-<h3>Query Parameters</h3>
-<ul>
-<li><code>limit</code> (integer, optional): Maximum number of counters to return (default: 20, max: 100)</li>
-<li><code>cursor</code> (string, optional): Opaque pagination token from a previous response&#39;s <code>next_cursor</code></li>
-</ul></div>
-<h3>Response (200 OK)</h3>
-<pre><code>{
-  "counters": [
-    {
-      "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
-      "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
-      "label": "page_views",
-      "value": 1523,
-      "max_delta": 50,
-      "created_at": "2026-04-08T10:30:00Z",
-      "updated_at": "2026-04-08T10:35:42Z"
-    }
-  ],
-  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNC0wOFQxMDozNTo0MloiLCJpZCI6IjQxNTM3ODQyLWU0NjMtNDVhZi05YWM5LThlNDYzOWFhODVkMiJ9"
-}
-</code></pre>
-<h4>Fields</h4>
-<ul>
-<li><code>counters</code> (array): List of counter objects for this tenant</li>
-<li><code>next_cursor</code> (string, nullable): Opaque token for the next page. <code>null</code> when there are no more counters</li>
-</ul></div>
-<h3>Pagination</h3>
-<p>Use <code>limit</code> to control page size and pass the returned <code>next_cursor</code> as the <code>cursor</code> query parameter to retrieve the next page. The cursor is an opaque base64-encoded token — do not construct or modify it.</p>
-<h3>Errors</h3>
-<div class="error-box"><ul>
-<li>400 INVALID_UUID - Invalid tenant_id format</li>
-<li>400 INVALID_PARAMETER - limit is not between 1 and 100</li>
-<li>400 INVALID_CURSOR - Cursor is malformed</li>
-<li>404 TENANT_NOT_FOUND - Tenant does not exist</li>
-<li>401 UNAUTHORIZED - Missing or invalid API key</li>
-<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
-</ul></div>
-<h3>Examples</h3>
-<ul>
-<li>First page (20 counters): <code>GET .../counters?limit=20</code></li>
-<li>Next page: <code>GET .../counters?limit=20&amp;cursor=&lt;next_cursor_from_previous_response&gt;</code></li>
-<li>Custom page size: <code>GET .../counters?limit=50</code></li>
-</ul></div>
-
-            </div>
-        </div>
-        <div class="endpoint" id="v2-get-counter">
-            <div class="endpoint-header">
-                <span class="method GET">GET</span>
-                <h2 class="endpoint-title">V2 Get Counter</h2>
-            </div>
-            <div class="endpoint-url">{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}</div>
-            <div class="endpoint-content">
-<h3>V2 Get Counter</h3>
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{TENANT_API_KEY}}</code></td><td>Tenant credentials require <code>counter:read</code>; administrator keys are also accepted.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>JSON response body.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request GET &#34;$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34;</code></pre>
+<h4>Sample response</h4>
+<pre class="api-sample"><code class="language-json">{
+  &#34;counter_id&#34;: &#34;01912345-6789-7000-8000-000000000002&#34;,
+  &#34;tenant_id&#34;: &#34;01912345-6789-7000-8000-000000000001&#34;,
+  &#34;label&#34;: &#34;daily_steps&#34;,
+  &#34;value&#34;: 8421,
+  &#34;max_delta&#34;: 100000,
+  &#34;created_at&#34;: &#34;2026-09-25T08:00:00Z&#34;,
+  &#34;updated_at&#34;: &#34;2026-09-25T12:01:00Z&#34;
+}</code></pre>
 <p>Reads the current counter value using a tenant-scoped credential with the</p>
-<p><code>counter:read</code> scope. V2 reads use the configured bounded read-through cache;</p>
 <p>see the deployment guide for cache configuration and consistency behavior.</p>
-<h3>Request</h3>
-<pre><code>GET /v2/tenants/{tenant_id}/counters/{counter_id}
-X-API-Key: tenant-scoped-key
-</code></pre>
-<p>V2 is the recommended contract for new clients. See <code>docs/api-v2.md</code> for the</p>
-<p>canonical contract; mutations require an <code>Idempotency-Key</code>.</p>
 
             </div>
-        </div>
-        <div class="endpoint" id="v2-increment-counter">
+        </article>
+<article class="endpoint" id="increment-counter">
             <div class="endpoint-header">
-                <span class="method POST">POST</span>
-                <h2 class="endpoint-title">V2 Increment Counter</h2>
+                <span class="method">POST</span>
+                <h3 class="endpoint-title">Increment Counter</h3>
             </div>
-            <div class="endpoint-url">{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/inc?delta=5</div>
+            <div class="endpoint-url"><code>POST {base_url}/v2/tenants/{tenant_id}/counters/{counter_id}/inc?delta=5</code></div>
             <div class="endpoint-content">
-<h3>V2 Increment Counter</h3>
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{TENANT_API_KEY}}</code></td><td>Requires <code>counter:increment</code>.</td></tr>
+<tr><td><code>Idempotency-Key</code></td><td><code>{{UUID_IDEMPOTENCY_KEY}}</code></td><td>Required UUID; reuse only for retries of this same mutation.</td></tr>
+</tbody></table></div>
+<h4>Query parameters</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>delta</code></td><td><code>5</code></td><td>Optional positive int64 increment; defaults to 1 and cannot exceed <code>max_delta</code>.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>JSON response body.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request POST &#34;$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/inc?delta=5&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34; --header &#34;Idempotency-Key: $IDEMPOTENCY_KEY&#34;</code></pre>
+<h4>Sample response</h4>
+<pre class="api-sample"><code class="language-json">{
+  &#34;operation_id&#34;: &#34;01912345-6789-7000-8000-000000000003&#34;,
+  &#34;counter_id&#34;: &#34;01912345-6789-7000-8000-000000000002&#34;,
+  &#34;delta&#34;: 5,
+  &#34;value&#34;: 47,
+  &#34;replayed&#34;: false,
+  &#34;updated_at&#34;: &#34;2026-09-25T12:01:00Z&#34;
+}</code></pre>
 <p>Applies a durable increment. Use a fresh UUID idempotency key for each</p>
 <p>logical mutation and reuse that same key on transport retries. Requires a</p>
 <p>tenant-scoped credential with <code>counter:increment</code>.</p>
-<h3>Request</h3>
-<pre><code>POST /v2/tenants/{tenant_id}/counters/{counter_id}/inc?delta=5
-X-API-Key: tenant-scoped-key
-Idempotency-Key: 01912345-6789-7000-8000-000000000003
-</code></pre>
 <p>The counter update and operation-history record commit together in</p>
-<p>PostgreSQL. See <code>docs/api-v2.md</code> for response and error details.</p>
 
             </div>
-        </div>
-        <div class="endpoint" id="v2-set-counter">
+        </article>
+<article class="endpoint" id="set-counter">
             <div class="endpoint-header">
-                <span class="method POST">POST</span>
-                <h2 class="endpoint-title">V2 Set Counter</h2>
+                <span class="method">POST</span>
+                <h3 class="endpoint-title">Set Counter</h3>
             </div>
-            <div class="endpoint-url">{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/set</div>
+            <div class="endpoint-url"><code>POST {base_url}/v2/tenants/{tenant_id}/counters/{counter_id}/set</code></div>
             <div class="endpoint-content">
-<h3>V2 Set Counter</h3>
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{TENANT_API_KEY}}</code></td><td>Requires the <code>counter:adjust</code> scope.</td></tr>
+<tr><td><code>Idempotency-Key</code></td><td><code>{{UUID_IDEMPOTENCY_KEY}}</code></td><td>Required UUID; reuse only for retries of this same request.</td></tr>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>Request body is JSON.</td></tr>
+</tbody></table></div>
+<h4>Request body</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>value</code></td><td><code>100</code></td><td>Required int64 value to set.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>JSON response body.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request POST &#34;$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/set&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34; --header &#34;Idempotency-Key: $IDEMPOTENCY_KEY&#34; --header &#34;Content-Type: application/json&#34; --data-raw &#39;{&#34;value&#34;:100}&#39;</code></pre>
+<h4>Sample response</h4>
+<pre class="api-sample"><code class="language-json">{
+  &#34;operation_id&#34;: &#34;01912345-6789-7000-8000-000000000004&#34;,
+  &#34;counter_id&#34;: &#34;01912345-6789-7000-8000-000000000002&#34;,
+  &#34;delta&#34;: 53,
+  &#34;value&#34;: 100,
+  &#34;replayed&#34;: false,
+  &#34;updated_at&#34;: &#34;2026-09-25T12:03:00Z&#34;
+}</code></pre>
 <p>Sets a counter to a value and records the adjustment in operation history.</p>
 <p>Requires <code>counter:adjust</code> and a UUID <code>Idempotency-Key</code>. Reuse the key only</p>
 <p>when retrying the same logical request.</p>
-<h3>Request</h3>
-<pre><code>POST /v2/tenants/{tenant_id}/counters/{counter_id}/set
-X-API-Key: tenant-scoped-key
-Idempotency-Key: 01912345-6789-7000-8000-000000000004
-Content-Type: application/json
-
-{"value": 100}
-</code></pre>
-<p>See <code>docs/api-v2.md</code> for response and error details.</p>
 
             </div>
-        </div>
-        <div class="endpoint" id="v2-operation-history">
+        </article>
+<article class="endpoint" id="operation-history">
             <div class="endpoint-header">
-                <span class="method GET">GET</span>
-                <h2 class="endpoint-title">V2 Operation History</h2>
+                <span class="method">GET</span>
+                <h3 class="endpoint-title">Operation History</h3>
             </div>
-            <div class="endpoint-url">{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/operations?limit=50</div>
+            <div class="endpoint-url"><code>GET {base_url}/v2/tenants/{tenant_id}/counters/{counter_id}/operations?limit=50</code></div>
             <div class="endpoint-content">
-<h3>V2 Operation History</h3>
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{TENANT_API_KEY}}</code></td><td>Requires the <code>counter:history</code> scope.</td></tr>
+</tbody></table></div>
+<h4>Query parameters</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>limit</code></td><td><code>50</code></td><td>Optional integer from 1–100; defaults to 50.</td></tr>
+<tr><td><code>cursor</code></td><td><code>{{CURSOR}}</code></td><td>Optional opaque cursor; pass <code>next_cursor</code> unchanged.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>JSON response body.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request GET &#34;$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/operations?limit=50&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34;</code></pre>
+<h4>Sample response</h4>
+<pre class="api-sample"><code class="language-json">{
+  &#34;operations&#34;: [
+    {
+      &#34;operation_id&#34;: &#34;01912345-6789-7000-8000-000000000003&#34;,
+      &#34;counter_id&#34;: &#34;01912345-6789-7000-8000-000000000002&#34;,
+      &#34;kind&#34;: &#34;increment&#34;,
+      &#34;delta&#34;: 5,
+      &#34;value_before&#34;: 42,
+      &#34;value_after&#34;: 47,
+      &#34;metadata&#34;: {},
+      &#34;created_at&#34;: &#34;2026-09-25T12:01:00Z&#34;,
+      &#34;completed_at&#34;: &#34;2026-09-25T12:01:00Z&#34;
+    }
+  ],
+  &#34;next_cursor&#34;: null
+}</code></pre>
 <p>Returns paginated, reverse-chronological counter operations. Requires a</p>
 <p>tenant-scoped credential with <code>counter:history</code>.</p>
-<h3>Request</h3>
-<pre><code>GET /v2/tenants/{tenant_id}/counters/{counter_id}/operations?limit=50
-X-API-Key: tenant-scoped-key
-</code></pre>
 <p>Pass the opaque <code>next_cursor</code> from a response unchanged to fetch the next</p>
-<p>page. See <code>docs/api-v2.md</code> for response details.</p>
 
             </div>
+        </article>
+
         </div>
-    </div>
+        </div>
+    </section>
+    <footer>Counter API · PostgreSQL-backed counters with durable operation history.</footer>
+    </main>
+    <script>
+      (() => {
+        const links = Array.from(document.querySelectorAll(".toc a"));
+        const toc = document.querySelector(".toc");
+        const sections = links.map((link) => document.querySelector(link.getAttribute("href"))).filter(Boolean);
+        if (!("IntersectionObserver" in window) || !sections.length) return;
+        const scrollBehavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+        links.find((link) => link.hash === window.location.hash)?.setAttribute("aria-current", "location");
+        const observer = new IntersectionObserver((entries) => {
+          const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+          if (!visible.length) return;
+          const activeId = visible[0].target.id;
+          links.forEach((link) => {
+            if (link.hash === "#" + activeId) {
+              link.setAttribute("aria-current", "location");
+              if (window.matchMedia("(max-width: 760px)").matches) {
+                toc.scrollTo({ left: link.offsetLeft - (toc.clientWidth - link.clientWidth) / 2, behavior: scrollBehavior });
+              } else {
+                toc.scrollTo({ top: link.offsetTop - (toc.clientHeight - link.clientHeight) / 2, behavior: scrollBehavior });
+              }
+            } else {
+              link.removeAttribute("aria-current");
+            }
+          });
+        }, { rootMargin: "-18% 0px -68% 0px", threshold: 0 });
+        sections.forEach((section) => observer.observe(section));
+      })();
+    </script>
 </body>
+
 </html>

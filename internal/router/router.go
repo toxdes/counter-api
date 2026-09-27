@@ -22,6 +22,7 @@ type Router struct {
 
 var routeSurface = []string{
 	"GET /",
+	"GET /tools/curl",
 	"GET /livez",
 	"GET /readyz",
 	"GET /metrics",
@@ -140,19 +141,20 @@ func NewRouterWithObservability(db *database.DB, corsConfig *middleware.CORSConf
 
 func registerRoutes(r *routing.Router, tenantService service.TenantService, counterService, v1CounterReadService service.CounterService, historyService service.OperationHistoryService, credentialService service.CredentialService, health *observability.HealthState, metrics *observability.Metrics, db *database.DB, version string, schemaVersion int64) {
 	r.Get("/", toHandler(handlers.DocsHandler))
+	r.Get("/tools/curl", toHandler(handlers.CurlBuilderHandler))
 	r.Get("/livez", toHandler(handlers.LivenessHandler(health)))
 	r.Get("/readyz", toHandler(handlers.ReadinessHandler(health, db)))
 	r.Get("/metrics", middleware.RequireAdminRouting(toHandler(handlers.MetricsHandler(metrics, db, version, schemaVersion))))
 
 	r.Post("/tenants", middleware.RequireAdminRouting(toHandler(handlers.CreateTenantServiceHandler(tenantService))))
 	r.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantServiceHandler(tenantService)))
-	r.Get("/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterRead)(toHandler(handlers.ListCountersServiceHandler(counterService))))
+	r.Get("/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterList)(toHandler(handlers.ListCountersServiceHandler(counterService))))
 	r.Post("/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterCreate)(toHandler(handlers.CreateCounterServiceHandler(counterService))))
 
 	getCounter := handlers.GetCounterServiceHandler(v1CounterReadService)
 	incrementCounter := handlers.IncrementCounterServiceHandler(counterService)
 	setCounter := handlers.SetCounterServiceHandler(counterService)
-	r.Get("/tenants/<tenant_id>/counters/<counter_id>", toHandler(getCounter))
+	r.Get("/tenants/<tenant_id>/counters/<counter_id>", middleware.RequireScopesRouting(middleware.ScopeCounterRead)(toHandler(getCounter)))
 	r.Post("/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(incrementCounter))
 	r.Post("/tenants/<tenant_id>/counters/<counter_id>/set", middleware.RequireScopesRouting(middleware.ScopeCounterAdjust)(toHandler(setCounter)))
 

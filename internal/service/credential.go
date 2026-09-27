@@ -174,6 +174,7 @@ func normalizeCredentialScopes(scopes []string) ([]string, error) {
 	allowed := map[string]bool{
 		"tenant:read":       true,
 		"counter:read":      true,
+		"counter:list":      true,
 		"counter:create":    true,
 		"counter:increment": true,
 		"counter:adjust":    true,
