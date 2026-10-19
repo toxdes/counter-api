@@ -32,6 +32,16 @@ func TestCurlBuilderHandlerServesCommandBuilder(t *testing.T) {
 		"Tenant API Key",
 		"Get tenant",
 		"Get counter",
+		"Counter metadata",
+		"Read metadata",
+		"Create metadata",
+		"Replace metadata",
+		"Delete metadata",
+		"id=\"metadata-etag\"",
+		"id=\"metadata-json\"",
+		"id=\"metadata-idempotency-key\"",
+		"If-None-Match",
+		"If-Match",
 		"id=\"tenant-read-id\"",
 		"id=\"counter-read-id\"",
 		"id=\"counter-read-warning\"",
@@ -59,7 +69,7 @@ func TestCurlBuilderHandlerServesCommandBuilder(t *testing.T) {
 			t.Errorf("page does not contain %q", want)
 		}
 	}
-	for _, unwanted := range []string{"V1", "V2", "fetch(", "<textarea", "Command copied to clipboard.", ".step:nth-of-type(2) .step-number"} {
+	for _, unwanted := range []string{"V1", "V2", "fetch(", "Command copied to clipboard.", ".step:nth-of-type(2) .step-number"} {
 		if strings.Contains(body, unwanted) {
 			t.Errorf("page unexpectedly contains %q", unwanted)
 		}
