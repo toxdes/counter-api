@@ -36,6 +36,11 @@ docs: |-
 
   Creates a new counter under the specified tenant.
 
+  **Idempotency:** Optional `Idempotency-Key` header containing a UUID. Reuse
+  the key with the same caller, URL, and request to replay the original counter
+  response for 24 hours. Replays return `Idempotency-Replayed: true`; changing
+  request data with the same key returns `409 IDEMPOTENCY_KEY_REUSED`.
+
   **Authentication:** Requires an administrator key or tenant-scoped key with
   the `counter:create` scope.
 

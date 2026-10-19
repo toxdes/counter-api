@@ -41,7 +41,7 @@ func NewCredentialStore(db *database.DB) *CredentialStore {
 
 func (s *CredentialStore) GetActiveCredential(ctx context.Context, credentialID string) (*models.APICredential, error) {
 	var row credentialRow
-	err := s.db.GetContext(ctx, &row, `
+	err := database.ExecutorFor(ctx, s.db).GetContext(ctx, &row, `
 		SELECT id, tenant_id, verifier, scopes, is_admin, created_at,
 			expires_at, revoked_at, created_by, rotated_from
 		FROM api_credentials
@@ -78,18 +78,18 @@ func (s *CredentialStore) CreateCredential(ctx context.Context, credential *mode
 }
 
 func (s *CredentialStore) CreateCredentialAndAudit(ctx context.Context, credential *models.APICredential, event *models.AuthAuditEvent) error {
-	tx, err := s.db.BeginTxx(ctx, nil)
+	tx, finish, err := database.BeginWrite(ctx, s.db)
 	if err != nil {
 		return fmt.Errorf("begin credential creation: %w", err)
 	}
-	defer tx.Rollback()
+	defer finish(false)
 	if _, err := insertCredential(ctx, tx, credential); err != nil {
 		return mapCredentialWriteError(err)
 	}
 	if _, err := insertAuthAuditEvent(ctx, tx, event); err != nil {
 		return fmt.Errorf("create credential audit event: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
+	if err := finish(true); err != nil {
 		return fmt.Errorf("commit credential creation: %w", err)
 	}
 	return nil
@@ -140,11 +140,11 @@ func (s *CredentialStore) RevokeCredential(ctx context.Context, credentialID str
 }
 
 func (s *CredentialStore) RevokeCredentialAndAudit(ctx context.Context, credentialID string, revokedAt time.Time, event *models.AuthAuditEvent) error {
-	tx, err := s.db.BeginTxx(ctx, nil)
+	tx, finish, err := database.BeginWrite(ctx, s.db)
 	if err != nil {
 		return fmt.Errorf("begin credential revocation: %w", err)
 	}
-	defer tx.Rollback()
+	defer finish(false)
 	result, err := tx.ExecContext(ctx, `
 		UPDATE api_credentials
 		SET revoked_at = $2
@@ -163,7 +163,7 @@ func (s *CredentialStore) RevokeCredentialAndAudit(ctx context.Context, credenti
 	if _, err := insertAuthAuditEvent(ctx, tx, event); err != nil {
 		return fmt.Errorf("create revocation audit event: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
+	if err := finish(true); err != nil {
 		return fmt.Errorf("commit credential revocation: %w", err)
 	}
 	return nil

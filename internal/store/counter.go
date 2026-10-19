@@ -29,21 +29,21 @@ func NewCounterStore(db *database.DB) *CounterStore {
 
 func (s *CounterStore) TenantExists(ctx context.Context, tenantID string) (bool, error) {
 	var exists bool
-	if err := s.db.GetContext(ctx, &exists, "SELECT EXISTS(SELECT 1 FROM tenants WHERE id = $1)", tenantID); err != nil {
+	if err := database.ExecutorFor(ctx, s.db).GetContext(ctx, &exists, "SELECT EXISTS(SELECT 1 FROM tenants WHERE id = $1)", tenantID); err != nil {
 		return false, fmt.Errorf("check tenant: %w", err)
 	}
 	return exists, nil
 }
 
 func (s *CounterStore) CreateCounter(ctx context.Context, counter *models.Counter) error {
-	tx, err := s.db.BeginTxx(ctx, nil)
+	tx, finish, err := database.BeginWrite(ctx, s.db)
 	if err != nil {
 		return fmt.Errorf("begin create counter: %w", err)
 	}
 	committed := false
 	defer func() {
 		if !committed {
-			_ = tx.Rollback()
+			_ = finish(false)
 		}
 	}()
 
@@ -76,7 +76,7 @@ func (s *CounterStore) CreateCounter(ctx context.Context, counter *models.Counte
 		return fmt.Errorf("record initial counter value: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := finish(true); err != nil {
 		return fmt.Errorf("commit create counter: %w", err)
 	}
 	committed = true

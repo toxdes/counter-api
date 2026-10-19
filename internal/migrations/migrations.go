@@ -23,7 +23,7 @@ var migrationFiles embed.FS
 
 var migrationFilenamePattern = regexp.MustCompile(`^([0-9]+)_[A-Za-z0-9][A-Za-z0-9_-]*\.(up|down)\.sql$`)
 
-const LatestVersion int64 = 7
+const LatestVersion int64 = 8
 
 type migrationFile struct {
 	version  int64

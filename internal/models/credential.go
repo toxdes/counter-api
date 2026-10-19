@@ -18,6 +18,7 @@ type APICredential struct {
 }
 
 // CredentialIssueResponse returns a newly generated API key exactly once.
+// Keyed HTTP retries omit api_key and replay only the non-secret fields.
 type CredentialIssueResponse struct {
 	CredentialID string     `json:"credential_id"`
 	TenantID     string     `json:"tenant_id,omitempty"`

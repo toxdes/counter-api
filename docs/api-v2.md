@@ -198,6 +198,18 @@ The administrator may create, rotate, and revoke tenant-scoped credentials.
 The raw key is returned only in the create or rotate response; store it
 securely because it cannot be recovered later.
 
+All credential routes, including administrator credential creation, accept an
+optional UUID `Idempotency-Key`. Retrying with the same authenticated caller,
+URL, key, and request within 24 hours prevents duplicate issuance or revocation.
+Retries return `Idempotency-Replayed: true`; creation/rotation replays omit
+`api_key` and return only the original non-secret fields. If the original secret
+was lost, revoke the returned credential ID and create a replacement using a
+new key. Omitting the header preserves existing behavior. The required-header
+rule for V2 counter increment/set does not apply to credential routes.
+
+See [idempotency coverage](api.md#idempotency-coverage) for key scoping,
+conflicts, failure handling, and expiration.
+
 ### Create
 
 ```http

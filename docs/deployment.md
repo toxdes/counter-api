@@ -9,6 +9,44 @@
 
 ## Environment Setup
 
+### Idempotency storage and upgrades
+
+Optional idempotency for creation and credential lifecycle endpoints requires
+schema migration 8. Apply migrations with the new binary before serving its
+traffic. Schema checks require an exact version match: an older binary cannot
+restart against schema 8, so coordinate upgrades and rollback with the schema
+change. This operational requirement is separate from API compatibility;
+existing clients can continue omitting the header.
+
+The `idempotency_requests` table stores only successful responses, with issued
+credential secrets removed. Records stop providing replay protection after
+24 hours. Expired records are replaced when their key is reused; schedule
+periodic deletion of other expired records to bound storage. Run this indexed,
+bounded cleanup query from the deployment's database maintenance job, repeating
+in separate transactions until no rows are deleted:
+
+```sql
+WITH expired AS (
+    SELECT scope, request_key
+    FROM idempotency_requests
+    WHERE expires_at <= NOW()
+    ORDER BY expires_at
+    LIMIT 10000
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM idempotency_requests AS requests
+USING expired
+WHERE requests.scope = expired.scope
+  AND requests.request_key = expired.request_key;
+```
+
+Monitor `idempotency_replay`, `idempotency_conflict`, database pool waits, and
+table/index size. Requests with no key do not touch this replay table. Keyed
+requests add a transaction-scoped advisory lock and replay-storage queries;
+different keys proceed independently, while same-key retries wait within the
+existing request/database timeouts. Load-test keyed creation separately from
+counter increments when sizing connection pools and retry budgets.
+
 ### 1. Create Database
 
 ```bash

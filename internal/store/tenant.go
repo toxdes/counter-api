@@ -32,7 +32,7 @@ func NewTenantStore(db *database.DB) *TenantStore {
 }
 
 func (s *TenantStore) CreateTenant(ctx context.Context, tenant *models.Tenant) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := database.ExecutorFor(ctx, s.db).ExecContext(ctx,
 		"INSERT INTO tenants (id, label, created_at, updated_at) VALUES ($1, $2, $3, $4)",
 		tenant.ID, tenant.Label, tenant.CreatedAt, tenant.UpdatedAt,
 	)

@@ -35,6 +35,7 @@ logs/
 
 # Go workspace file
 go.work
+.worktrees/
 
 # IDE
 .vscode/
