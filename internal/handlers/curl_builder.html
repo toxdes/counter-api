@@ -44,11 +44,12 @@
     .origin { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 24px; padding: 16px 28px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
     label { display: block; margin-bottom: 7px; font-size: 1rem; font-weight: 500; }
     .origin label { margin-bottom: 10px; font-size: 1rem; line-height: 1.5; }
-    input[type="text"], input[type="url"], input[type="number"], input[type="password"] {
+    input[type="text"], input[type="url"], input[type="number"], input[type="password"], select, textarea {
       width: 100%; min-height: 52px; padding: 10px 14px; border: 1px solid #5b6665; border-radius: 4px;
       background: #1e2b2b; color: var(--ink); font: inherit; font-size: 1rem; line-height: 1.4;
     }
-    input:focus-visible, button:focus-visible, a:focus-visible {
+    textarea { min-height: 160px; resize: vertical; font-family: "JetBrains Mono", monospace; font-size: .9rem; }
+    input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
       outline: 2px solid var(--focus); outline-offset: 3px;
     }
     .hint, .description { margin: 6px 0 0; color: var(--muted); font-size: .86rem; }
@@ -63,6 +64,7 @@
     .step-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 22px 24px; margin-top: 18px; }
     .step[aria-labelledby="tenant-title"] .step-fields > div:first-child { max-width: 692px; }
     .step-fields > .field-row { grid-column: 1 / -1; }
+    .step-fields > .field-wide { grid-column: 1 / -1; }
     .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
     legend { margin-bottom: 8px; font-size: .88rem; font-weight: 650; }
@@ -76,6 +78,7 @@
     .copy { min-width: 52px; min-height: 36px; padding: 6px 10px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--accent-hover); font: inherit; font-size: .86rem; font-weight: 600; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; }
     .copy:hover { background: var(--surface-raised); color: var(--ink); }
     .copy:active { background: #263231; }
+    .copy:disabled { color: var(--muted); cursor: not-allowed; background: transparent; }
     .status { margin: 10px 0 0; color: var(--muted); font-size: .86rem; }
     .status:empty { display: none; }
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
@@ -227,6 +230,46 @@
           <p class="status" id="counter-read-status" aria-live="polite"></p>
         </div>
       </section>
+
+      <section class="step" aria-labelledby="metadata-title">
+        <div>
+          <div class="step-title"><span class="step-number" aria-hidden="true">6</span><div><h2 id="metadata-title">Counter metadata</h2><p class="description">Uses the tenant ID and API Key from step 3 and the counter ID from step 5. Read requires <code>metadata:read</code>; create, replace, and delete require <code>metadata:write</code>.</p></div></div>
+          <div class="step-fields">
+            <div>
+              <label for="metadata-action">Action</label>
+              <select id="metadata-action" aria-describedby="metadata-action-hint">
+                <option value="read">Read metadata</option>
+                <option value="create">Create metadata</option>
+                <option value="replace">Replace metadata</option>
+                <option value="delete">Delete metadata</option>
+              </select>
+              <p class="hint" id="metadata-action-hint">Read includes response headers. Copy the quoted ETag for a later edit.</p>
+            </div>
+            <div id="metadata-etag-field" hidden>
+              <label for="metadata-etag">Current ETag</label>
+              <input id="metadata-etag" type="text" placeholder='"Paste version from the ETag header"' autocomplete="off" spellcheck="false" aria-describedby="metadata-etag-hint">
+              <p class="hint" id="metadata-etag-hint">Paste the full quoted ETag from the latest read. A stale ETag returns 412; read again before editing.</p>
+            </div>
+            <div id="metadata-key-field" hidden>
+              <label for="metadata-idempotency-key">Idempotency key <span class="hint">(optional UUID)</span></label>
+              <input id="metadata-idempotency-key" type="text" autocomplete="off" spellcheck="false" aria-describedby="metadata-key-hint">
+              <p class="hint" id="metadata-key-hint">For retries, reuse the same UUID, JSON, and ETag headers. Use a new UUID for each new write.</p>
+            </div>
+            <div class="field-wide" id="metadata-json-field" hidden>
+              <label for="metadata-json">Metadata JSON</label>
+              <textarea id="metadata-json" spellcheck="false" autocomplete="off" aria-describedby="metadata-json-hint">{"color":"blue","tags":["daily"]}</textarea>
+              <p class="hint" id="metadata-json-hint">Any JSON value, including arrays, scalars, and null. Up to 64 KiB and 64 nesting levels; JSONB limits apply. Replacement removes omitted properties; deletion removes the document and leaves the count unchanged.</p>
+            </div>
+          </div>
+        </div>
+        <div class="code-wrap">
+          <div class="code-heading"><span class="command-label" id="metadata-command-label">Generated command</span><button class="copy" type="button" data-copy="metadata-command" aria-label="Copy metadata command"><span class="copy-label">Copy</span></button></div>
+          <pre class="command-text" aria-labelledby="metadata-command-label"><code id="metadata-command"></code></pre>
+          <span class="sr-only" id="metadata-copy-live" aria-live="polite"></span>
+          <p class="warning" id="metadata-warning" hidden>Select metadata:read in step 2 for a key that can read metadata.</p>
+          <p class="status" id="metadata-status" aria-live="polite"></p>
+        </div>
+      </section>
     </div>
 
     <footer>Tenant, counter, and credential IDs are copied manually from each JSON response. Commands contain the API key you entered; avoid sharing them or saving them in shell history.</footer>
@@ -297,6 +340,7 @@
         const counterReadID = byId("counter-read-id").value.trim();
         byId("counter-read-command").textContent = curlGet(root + "/v2/tenants/" + encodeURIComponent(counterTenantId) + "/counters/" + encodeURIComponent(counterReadID), byId("tenant-api-key").value);
         byId("counter-read-warning").hidden = scopes.includes("counter:read");
+        refreshMetadata(root, counterTenantId, counterReadID, scopes);
       };
       const curlWithRawJSON = (url, apiKey, rawJSON) => [
         "curl --silent --show-error -X POST " + shellQuote(url) + " \\",
@@ -305,7 +349,78 @@
         "  --data-raw " + shellQuote(rawJSON) + " | jq ."
       ].join("\n");
 
-      document.querySelectorAll("input").forEach((input) => input.addEventListener("input", refresh));
+      const metadataCommand = (method, url, apiKey, headers, body) => {
+        const args = ["curl --silent --show-error --include --request " + method + " " + shellQuote(url),
+          "  --header " + shellQuote("X-API-Key: " + apiKey)];
+        for (const [name, value] of headers) args.push("  --header " + shellQuote(name + ": " + value));
+        if (body !== undefined) {
+          args.push("  --header 'Content-Type: application/json'");
+          args.push("  --data-raw " + shellQuote(body));
+        }
+        return args.join(" \\\n");
+      };
+      const refreshMetadata = (root, tenantId, counterId, scopes) => {
+        const action = byId("metadata-action").value;
+        const edit = action === "replace" || action === "delete";
+        const writing = action !== "read";
+        const hasBody = action === "create" || action === "replace";
+        byId("metadata-etag-field").hidden = !edit;
+        byId("metadata-key-field").hidden = !writing;
+        byId("metadata-json-field").hidden = !hasBody;
+        byId("metadata-action-hint").textContent = {
+          read: "Read includes response headers. Copy the quoted ETag for a later edit.",
+          create: "Creates a document only if none exists, using If-None-Match: *.",
+          replace: "Replaces the entire document only if its current ETag matches.",
+          delete: "Removes the document only if its current ETag matches. Returns 204 with no body."
+        }[action];
+        const scope = writing ? "metadata:write" : "metadata:read";
+        byId("metadata-warning").hidden = scopes.includes(scope);
+        byId("metadata-warning").textContent = "Select " + scope + " in step 2 for a key that can " + (writing ? "change" : "read") + " metadata.";
+        const copy = document.querySelector('button[data-copy="metadata-command"]');
+        copy.disabled = true;
+        byId("metadata-command").textContent = "Complete the metadata fields to generate this command.";
+        let error = "";
+        const etag = byId("metadata-etag").value.trim();
+        const key = byId("metadata-idempotency-key").value.trim();
+        const rawJSON = byId("metadata-json").value;
+        const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!tenantId || !counterId) error = "Enter the tenant ID in step 3 and the counter ID in step 5.";
+        else if (!byId("tenant-api-key").value) error = "Enter the Tenant API Key in step 3.";
+        else if (edit && !/^"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"$/.test(etag)) error = 'Paste the current quoted ETag, for example "b858fc63-a09a-4ec2-922e-4e91629122dd".';
+        else if (writing && key && !uuid.test(key)) error = "Enter a UUID for the idempotency key, or leave it blank.";
+        else if (hasBody) {
+          if (new TextEncoder().encode(rawJSON).length > 65536) error = "Metadata JSON must be at most 64 KiB.";
+          else {
+            try {
+              JSON.parse(rawJSON); // Validate only: send the original text to preserve large integers.
+              let depth = 0, inString = false, escaped = false;
+              for (const character of rawJSON) {
+                if (inString) {
+                  if (escaped) escaped = false;
+                  else if (character === "\\") escaped = true;
+                  else if (character === '"') inString = false;
+                } else if (character === '"') inString = true;
+                else if (character === "{" || character === "[") {
+                  if (++depth > 64) { error = "Metadata JSON must have at most 64 nesting levels."; break; }
+                } else if (character === "}" || character === "]") depth--;
+              }
+            } catch (_) { error = "Enter valid JSON: an object, array, scalar, or null."; }
+          }
+        }
+        byId("metadata-status").textContent = error;
+        if (error) return;
+        const headers = [];
+        if (action === "create") headers.push(["If-None-Match", "*"]);
+        if (edit) headers.push(["If-Match", etag]);
+        if (writing && key) headers.push(["Idempotency-Key", key]);
+        const method = action === "read" ? "GET" : action === "delete" ? "DELETE" : "PUT";
+        const url = root + "/v2/tenants/" + encodeURIComponent(tenantId) + "/counters/" + encodeURIComponent(counterId) + "/metadata";
+        byId("metadata-command").textContent = metadataCommand(method, url, byId("tenant-api-key").value, headers, hasBody ? rawJSON : undefined);
+        copy.disabled = false;
+      };
+
+      document.querySelectorAll("input, textarea").forEach((input) => input.addEventListener("input", refresh));
+      byId("metadata-action").addEventListener("change", refresh);
       document.querySelectorAll("input[type=checkbox]").forEach((input) => input.addEventListener("change", refresh));
       const copyTimers = new WeakMap();
       document.querySelectorAll("button[data-copy]").forEach((button) => button.addEventListener("click", async () => {
