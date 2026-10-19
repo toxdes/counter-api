@@ -78,12 +78,6 @@ func IncrementCounterHandler(db *database.DB) fasthttp.RequestHandler {
 
 // IncrementCounterServiceHandler handles increments through the counter service boundary.
 func IncrementCounterServiceHandler(counterService service.CounterService) fasthttp.RequestHandler {
-	return IncrementCounterServiceHandlerVersioned(counterService, contract.V1)
-}
-
-// IncrementCounterServiceHandlerVersioned applies the version-specific
-// idempotency-key contract while sharing the durable mutation path.
-func IncrementCounterServiceHandlerVersioned(counterService service.CounterService, version contract.Version) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		tenantID, ok := ctx.UserValue("tenant_id").(string)
 		if !ok || tenantID == "" {
@@ -119,7 +113,7 @@ func IncrementCounterServiceHandlerVersioned(counterService service.CounterServi
 		}
 
 		idempotencyKey := strings.TrimSpace(string(ctx.Request.Header.Peek("Idempotency-Key")))
-		if err := contract.ValidateIdempotencyKey(version, idempotencyKey); err != nil {
+		if err := contract.ValidateIdempotencyKey(idempotencyKey, true); err != nil {
 			if errors.Is(err, contract.ErrIdempotencyKeyRequired) {
 				respondWithError(ctx, fasthttp.StatusBadRequest, "IDEMPOTENCY_KEY_REQUIRED", err.Error())
 			} else {
@@ -131,13 +125,7 @@ func IncrementCounterServiceHandlerVersioned(counterService service.CounterServi
 		var result *service.CounterMutationResult
 		var err error
 		if attributable, ok := counterService.(service.AttributableCounterService); ok {
-			if idempotencyKey == "" {
-				result, err = attributable.IncrementWithActor(requestDatabaseContext(ctx), tenantID, counterID, delta, principalID(ctx))
-			} else {
-				result, err = attributable.IncrementWithOperationActor(requestDatabaseContext(ctx), tenantID, counterID, delta, idempotencyKey, principalID(ctx))
-			}
-		} else if idempotencyKey == "" {
-			result, err = counterService.Increment(requestDatabaseContext(ctx), tenantID, counterID, delta)
+			result, err = attributable.IncrementWithOperationActor(requestDatabaseContext(ctx), tenantID, counterID, delta, idempotencyKey, principalID(ctx))
 		} else {
 			result, err = counterService.IncrementWithOperation(requestDatabaseContext(ctx), tenantID, counterID, delta, idempotencyKey)
 		}
@@ -191,12 +179,6 @@ func SetCounterValueHandler(db *database.DB) fasthttp.RequestHandler {
 
 // SetCounterServiceHandler handles counter value changes through the counter service boundary.
 func SetCounterServiceHandler(counterService service.CounterService) fasthttp.RequestHandler {
-	return SetCounterServiceHandlerVersioned(counterService, contract.V1)
-}
-
-// SetCounterServiceHandlerVersioned applies the version-specific idempotency
-// contract while recording the adjustment durably.
-func SetCounterServiceHandlerVersioned(counterService service.CounterService, version contract.Version) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		tenantID, ok := ctx.UserValue("tenant_id").(string)
 		if !ok || tenantID == "" {
@@ -239,7 +221,7 @@ func SetCounterServiceHandlerVersioned(counterService service.CounterService, ve
 		}
 
 		idempotencyKey := strings.TrimSpace(string(ctx.Request.Header.Peek("Idempotency-Key")))
-		if err := contract.ValidateIdempotencyKey(version, idempotencyKey); err != nil {
+		if err := contract.ValidateIdempotencyKey(idempotencyKey, true); err != nil {
 			if errors.Is(err, contract.ErrIdempotencyKeyRequired) {
 				respondWithError(ctx, fasthttp.StatusBadRequest, "IDEMPOTENCY_KEY_REQUIRED", err.Error())
 			} else {
@@ -251,13 +233,7 @@ func SetCounterServiceHandlerVersioned(counterService service.CounterService, ve
 		var result *service.CounterMutationResult
 		var err error
 		if attributable, ok := counterService.(service.AttributableCounterService); ok {
-			if idempotencyKey == "" {
-				result, err = attributable.SetWithActor(requestDatabaseContext(ctx), tenantID, counterID, *req.Value, principalID(ctx))
-			} else {
-				result, err = attributable.SetWithOperationActor(requestDatabaseContext(ctx), tenantID, counterID, *req.Value, idempotencyKey, principalID(ctx))
-			}
-		} else if idempotencyKey == "" {
-			result, err = counterService.Set(requestDatabaseContext(ctx), tenantID, counterID, *req.Value)
+			result, err = attributable.SetWithOperationActor(requestDatabaseContext(ctx), tenantID, counterID, *req.Value, idempotencyKey, principalID(ctx))
 		} else {
 			result, err = counterService.SetWithOperation(requestDatabaseContext(ctx), tenantID, counterID, *req.Value, idempotencyKey)
 		}

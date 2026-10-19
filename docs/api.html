@@ -82,8 +82,10 @@
         <div class="reference-layout">
         <nav class="toc" aria-label="Endpoints">
 <a href="#create-tenant">Create Tenant</a>
+<a href="#get-tenant">Get Tenant</a>
 <a href="#create-credential">Create Credential</a>
 <a href="#create-counter">Create Counter</a>
+<a href="#list-counters">List Counters</a>
 <a href="#get-counter">Get Counter</a>
 <a href="#increment-counter">Increment Counter</a>
 <a href="#set-counter">Set Counter</a>
@@ -95,7 +97,7 @@
                 <span class="method">POST</span>
                 <h3 class="endpoint-title">Create Tenant</h3>
             </div>
-            <div class="endpoint-url"><code>POST {base_url}/tenants</code></div>
+            <div class="endpoint-url"><code>POST {base_url}/v2/tenants</code></div>
             <div class="endpoint-content">
 <h4>Request headers</h4>
 <div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
@@ -111,7 +113,7 @@
 <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>JSON response body.</td></tr>
 </tbody></table></div>
 <h4>Sample request</h4>
-<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request POST &#34;$BASE_URL/tenants&#34; --header &#34;X-API-Key: $ADMIN_API_KEY&#34; --header &#34;Content-Type: application/json&#34; --data-raw &#39;{&#34;label&#34;:&#34;production&#34;}&#39;</code></pre>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request POST &#34;$BASE_URL/v2/tenants&#34; --header &#34;X-API-Key: $ADMIN_API_KEY&#34; --header &#34;Content-Type: application/json&#34; --data-raw &#39;{&#34;label&#34;:&#34;production&#34;}&#39;</code></pre>
 <h4>Sample response</h4>
 <pre class="api-sample"><code class="language-json">{
   &#34;tenant_id&#34;: &#34;01912345-6789-7000-8000-000000000001&#34;,
@@ -133,6 +135,43 @@
 <li>400 INVALID_PARAMETER - Label validation failed</li>
 <li>409 TENANT_LABEL_EXISTS - Label already in use</li>
 <li>401 UNAUTHORIZED - Missing or invalid API key</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
+</ul>
+
+            </div>
+        </article>
+<article class="endpoint" id="get-tenant">
+            <div class="endpoint-header">
+                <span class="method">GET</span>
+                <h3 class="endpoint-title">Get Tenant</h3>
+            </div>
+            <div class="endpoint-url"><code>GET {base_url}/v2/tenants/{tenant_id}</code></div>
+            <div class="endpoint-content">
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{TENANT_API_KEY}}</code></td><td>Requires <code>tenant:read</code> for this tenant or an administrator key.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>JSON response body.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request GET &#34;$BASE_URL/v2/tenants/$TENANT_ID&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34;</code></pre>
+<h4>Sample response</h4>
+<pre class="api-sample"><code class="language-json">{
+  &#34;tenant_id&#34;: &#34;01912345-6789-7000-8000-000000000001&#34;,
+  &#34;label&#34;: &#34;production&#34;,
+  &#34;created_at&#34;: &#34;2026-09-25T08:00:00Z&#34;,
+  &#34;updated_at&#34;: &#34;2026-09-25T08:00:00Z&#34;
+}</code></pre>
+<p>Retrieves tenant information by tenant ID.</p>
+<p><strong>Authentication:</strong> Requires an administrator key or a tenant key with <code>tenant:read</code>.</p>
+<p><strong>Rate Limit:</strong> 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)</p>
+<h3>Response (200 OK)</h3>
+<h3>Errors</h3>
+<ul class="error-box">
+<li>400 INVALID_UUID - Invalid tenant_id format</li>
+<li>404 TENANT_NOT_FOUND - Tenant does not exist</li>
 <li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
 </ul>
 
@@ -181,7 +220,7 @@
                 <span class="method">POST</span>
                 <h3 class="endpoint-title">Create Counter</h3>
             </div>
-            <div class="endpoint-url"><code>POST {base_url}/tenants/{tenant_id}/counters</code></div>
+            <div class="endpoint-url"><code>POST {base_url}/v2/tenants/{tenant_id}/counters</code></div>
             <div class="endpoint-content">
 <h4>Request headers</h4>
 <div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
@@ -199,7 +238,7 @@
 <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>JSON response body.</td></tr>
 </tbody></table></div>
 <h4>Sample request</h4>
-<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request POST &#34;$BASE_URL/tenants/$TENANT_ID/counters&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34; --header &#34;Content-Type: application/json&#34; --data-raw &#39;{&#34;label&#34;:&#34;daily_steps&#34;,&#34;initial_value&#34;:0,&#34;max_delta&#34;:50}&#39;</code></pre>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request POST &#34;$BASE_URL/v2/tenants/$TENANT_ID/counters&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34; --header &#34;Content-Type: application/json&#34; --data-raw &#39;{&#34;label&#34;:&#34;daily_steps&#34;,&#34;initial_value&#34;:0,&#34;max_delta&#34;:50}&#39;</code></pre>
 <h4>Sample response</h4>
 <pre class="api-sample"><code class="language-json">{
   &#34;counter_id&#34;: &#34;01912345-6789-7000-8000-000000000002&#34;,
@@ -225,6 +264,51 @@
 <li>400 INVALID_PARAMETER - Parameter validation failed</li>
 <li>404 TENANT_NOT_FOUND - Tenant does not exist</li>
 <li>409 COUNTER_LABEL_EXISTS - Label already exists for this tenant</li>
+<li>401 UNAUTHORIZED - Missing or invalid API key</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
+</ul>
+
+            </div>
+        </article>
+<article class="endpoint" id="list-counters">
+            <div class="endpoint-header">
+                <span class="method">GET</span>
+                <h3 class="endpoint-title">List Counters</h3>
+            </div>
+            <div class="endpoint-url"><code>GET {base_url}/v2/tenants/{tenant_id}/counters</code></div>
+            <div class="endpoint-content">
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{TENANT_API_KEY}}</code></td><td>Requires <code>counter:list</code> for this tenant or an administrator key.</td></tr>
+</tbody></table></div>
+<h4>Query parameters</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>limit</code></td><td><code>20</code></td><td>Optional page size, 1–100.</td></tr>
+<tr><td><code>cursor</code></td><td><code></code></td><td>Optional opaque next_cursor from the preceding response.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>JSON response body.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --request GET &#34;$BASE_URL/v2/tenants/$TENANT_ID/counters?limit=20&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34;</code></pre>
+<h4>Sample response</h4>
+<pre class="api-sample"><code class="language-json">{
+  &#34;counters&#34;: [],
+  &#34;next_cursor&#34;: null
+}</code></pre>
+<p>Lists all counters belonging to a tenant with cursor-based pagination.</p>
+<p><strong>Authentication:</strong> Requires an administrator key or a tenant key with the <code>counter:list</code> scope.</p>
+<p><strong>Rate Limit:</strong> 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)</p>
+<h3>Response (200 OK)</h3>
+<h3>Pagination</h3>
+<p>Use <code>limit</code> to control page size and pass the returned <code>next_cursor</code> as the <code>cursor</code> query parameter to retrieve the next page. The cursor is an opaque base64-encoded token — do not construct or modify it.</p>
+<h3>Errors</h3>
+<ul class="error-box">
+<li>400 INVALID_UUID - Invalid tenant_id format</li>
+<li>400 INVALID_PARAMETER - limit is not between 1 and 100</li>
+<li>400 INVALID_CURSOR - Cursor is malformed</li>
+<li>404 TENANT_NOT_FOUND - Tenant does not exist</li>
 <li>401 UNAUTHORIZED - Missing or invalid API key</li>
 <li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
 </ul>
@@ -258,8 +342,18 @@
   &#34;created_at&#34;: &#34;2026-09-25T08:00:00Z&#34;,
   &#34;updated_at&#34;: &#34;2026-09-25T12:01:00Z&#34;
 }</code></pre>
-<p>Reads the current counter value using a tenant-scoped credential with the</p>
-<p>see the deployment guide for cache configuration and consistency behavior.</p>
+<p>Retrieves the current value and details of a specific counter.</p>
+<p><strong>Authentication:</strong> Requires a key with <code>counter:read</code> (administrator keys</p>
+<p>are also accepted).</p>
+<p>Reads use the configured bounded read-through cache. See the deployment</p>
+<p>guide for cache configuration and consistency behavior.</p>
+<h3>Response (200 OK)</h3>
+<h3>Errors</h3>
+<ul class="error-box">
+<li>400 INVALID_UUID - Invalid tenant_id or counter_id format</li>
+<li>404 COUNTER_NOT_FOUND - Counter does not exist</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
+</ul>
 
             </div>
         </article>
@@ -268,7 +362,7 @@
                 <span class="method">POST</span>
                 <h3 class="endpoint-title">Increment Counter</h3>
             </div>
-            <div class="endpoint-url"><code>POST {base_url}/v2/tenants/{tenant_id}/counters/{counter_id}/inc?delta=5</code></div>
+            <div class="endpoint-url"><code>POST {base_url}/v2/tenants/{tenant_id}/counters/{counter_id}/inc</code></div>
             <div class="endpoint-content">
 <h4>Request headers</h4>
 <div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
@@ -294,10 +388,21 @@
   &#34;replayed&#34;: false,
   &#34;updated_at&#34;: &#34;2026-09-25T12:01:00Z&#34;
 }</code></pre>
-<p>Applies a durable increment. Use a fresh UUID idempotency key for each</p>
-<p>logical mutation and reuse that same key on transport retries. Requires a</p>
-<p>tenant-scoped credential with <code>counter:increment</code>.</p>
-<p>The counter update and operation-history record commit together in</p>
+<p>Increments a counter value by a specified delta amount. Useful for tracking events like page views, clicks, or any countable metric.</p>
+<p><strong>Authentication:</strong> Requires an administrator key or a tenant key with</p>
+<p><code>counter:increment</code>. A UUID idempotency key is required.</p>
+<p><strong>Rate Limit:</strong> Controlled by the configured API rate limits.</p>
+<h3>Response (200 OK)</h3>
+<h3>Errors</h3>
+<ul class="error-box">
+<li>400 INVALID_UUID - Invalid tenant_id or counter_id format</li>
+<li>400 INVALID_DELTA - Delta parameter is not a positive integer</li>
+<li>404 COUNTER_NOT_FOUND - Counter does not exist</li>
+<li>400 COUNTER_OVERFLOW - Increment would cause integer overflow</li>
+<li>409 IDEMPOTENCY_KEY_REUSED - Idempotency key was reused with different request data</li>
+<li>409 OPERATION_IN_PROGRESS - The operation is already being completed</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
+</ul>
 
             </div>
         </article>
@@ -333,9 +438,22 @@
   &#34;replayed&#34;: false,
   &#34;updated_at&#34;: &#34;2026-09-25T12:03:00Z&#34;
 }</code></pre>
-<p>Sets a counter to a value and records the adjustment in operation history.</p>
-<p>Requires <code>counter:adjust</code> and a UUID <code>Idempotency-Key</code>. Reuse the key only</p>
-<p>when retrying the same logical request.</p>
+<p>Sets the counter value with a required UUID <code>Idempotency-Key</code> and records</p>
+<p>the adjustment in operation history.</p>
+<p><strong>Authentication:</strong> Requires an administrator key or a tenant key with <code>counter:adjust</code>.</p>
+<p><strong>Rate Limit:</strong> 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)</p>
+<h3>Response (200 OK)</h3>
+<h3>Errors</h3>
+<ul class="error-box">
+<li>400 INVALID_JSON - Invalid JSON in request body</li>
+<li>400 INVALID_UUID - Invalid tenant_id or counter_id format</li>
+<li>400 INVALID_VALUE - Value is out of valid range</li>
+<li>404 COUNTER_NOT_FOUND - Counter does not exist</li>
+<li>401 UNAUTHORIZED - Missing or invalid API key</li>
+<li>409 IDEMPOTENCY_KEY_REUSED - Idempotency key was reused with different request data</li>
+<li>409 OPERATION_IN_PROGRESS - The operation is already being completed</li>
+<li>429 RATE_LIMIT_EXCEEDED - Too many requests</li>
+</ul>
 
             </div>
         </article>

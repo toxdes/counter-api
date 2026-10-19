@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"counter/internal/contract"
 	"counter/internal/models"
 	"counter/internal/service"
 	"encoding/base64"
@@ -49,7 +48,7 @@ func TestOperationHistoryV2HandlerPaginatesScopedOperations(t *testing.T) {
 		}},
 		Next: &service.OperationCursor{CreatedAt: createdAt, OperationID: operationID},
 	}}
-	handler := OperationHistoryServiceHandlerVersioned(fake, contract.V2)
+	handler := OperationHistoryServiceHandler(fake)
 
 	cursorBytes, _ := json.Marshal(map[string]string{
 		"created_at":   createdAt.Format(time.RFC3339Nano),

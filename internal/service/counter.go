@@ -300,6 +300,8 @@ func setRequestHash(tenantID, counterID string, value int64) []byte {
 
 func mutationRequestHash(kind, tenantID, counterID string, value int64) []byte {
 	hash := sha256.New()
+	// This versions persisted request hashes, independently of HTTP API versions.
+	// Preserve it so previously recorded operations remain replayable.
 	for _, field := range []string{"counter-operation-v1", kind, tenantID, counterID} {
 		var length [8]byte
 		binary.BigEndian.PutUint64(length[:], uint64(len(field)))

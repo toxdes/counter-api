@@ -1,18 +1,16 @@
 # Counter API V2 Reference
 
-V2 is the stricter API contract for new clients. Existing unversioned routes
-remain V1 and continue to support current clients.
-
-> V2 routes are introduced incrementally. An endpoint is available only after
-> its implementation has been deployed.
+V2 is the only supported data API. Unversioned V1 routes have been removed
+and return `404`; they do not redirect to V2. All tenant/counter data routes
+require authentication and the appropriate action scope.
 
 ## Contract Guarantees
 
-- Every V2 counter mutation requires an `Idempotency-Key` header containing a UUID.
+- Counter increment and set require an `Idempotency-Key` header containing a UUID.
 - The key is scoped to the tenant and identifies one logical mutation.
 - A retry with the same key and the same canonical request returns the original
   result without applying the mutation again.
-- Reusing a key with different tenant, counter, operation, or delta data returns
+- Reusing a key within the same tenant for different counter, operation, or delta data returns
   `409 IDEMPOTENCY_KEY_REUSED`.
 - A successful mutation means PostgreSQL committed the counter update and its
   immutable operation record.
@@ -20,9 +18,9 @@ remain V1 and continue to support current clients.
 
 ## Authentication
 
-V2 preserves the existing authentication requirements unless an endpoint's V2
-contract explicitly documents a change. The legacy environment administrator
-key remains accepted during migration. Tenant-scoped keys use the format
+All data routes require an API key. The environment administrator key remains
+accepted when `LEGACY_API_KEY_ENABLED=true`; that setting controls the key,
+not API-version availability. Tenant-scoped keys use the format
 `ck_{credential_id}.{secret}` and are returned only once when created.
 
 Tenant-scoped credentials are authorized by both their tenant and their action
@@ -34,9 +32,49 @@ included in the default tenant credential scopes.
 
 Creating a tenant or managing credentials requires an administrator key. A
 tenant credential can create counters only when explicitly granted
-`counter:create`; that endpoint is currently the compatible V1 route
-`POST /tenants/{tenant_id}/counters`. The default tenant credential scopes do
+`counter:create` through `POST /v2/tenants/{tenant_id}/counters`. The default tenant credential scopes do
 not include `counter:list`, `counter:create`, or `counter:adjust`.
+
+## Create Tenant
+
+`POST /v2/tenants` requires an administrator key and a JSON body:
+
+```json
+{"label":"production"}
+```
+
+Returns `201` with `tenant_id`, `label`, `created_at`, and `updated_at`.
+Labels are required and globally unique. An optional UUID `Idempotency-Key`
+replays the original response for 24 hours.
+
+## Get Tenant
+
+`GET /v2/tenants/{tenant_id}` requires `tenant:read` on that tenant or an
+administrator key. Returns `200` with the tenant representation; a missing
+tenant returns `404 TENANT_NOT_FOUND`.
+
+## Create Counter
+
+`POST /v2/tenants/{tenant_id}/counters` requires `counter:create` on that tenant
+or an administrator key. Example JSON body:
+
+```json
+{"label":"daily_steps","initial_value":0,"max_delta":50}
+```
+
+`label` is optional and unique within the tenant. `initial_value` defaults to
+zero. `max_delta` defaults to 50 and must be positive. Returns `201` with the
+counter representation, including its UUID, tenant ID, label, value, maximum
+delta, and timestamps. Creation and the initial-value operation are atomic.
+An optional UUID `Idempotency-Key` replays the original response for 24 hours.
+
+## List Counters
+
+`GET /v2/tenants/{tenant_id}/counters?limit=20&cursor=...` requires
+`counter:list` on that tenant or an administrator key. `counter:read` alone
+does not permit listing. `limit` defaults to 20 and must be between 1 and 100.
+Returns `200` with `counters` and a nullable `next_cursor`; pass that opaque
+cursor unchanged to fetch the next page.
 
 ## Get Counter
 
@@ -48,7 +86,7 @@ GET /v2/tenants/{tenant_id}/counters/{counter_id}
 X-API-Key: tenant-scoped-key
 ```
 
-The response uses the same fields as the V1 Get Counter response. V2 reads may
+Counter reads may
 be served from a bounded read-through cache: a cache miss loads from PostgreSQL,
 and successful mutations invalidate the cached entry after commit. With the
 in-memory backend, a write handled by another API replica may not be visible
@@ -104,8 +142,8 @@ Content-Type: application/json
 
 An exact retry returns the same result with `replayed: true`.
 
-V2 increments require a credential with the `counter:increment` scope. V1
-increments remain compatible with the existing public route policy.
+Increments require a tenant credential with `counter:increment` or an
+administrator key. Anonymous increments are not supported.
 
 ### Errors
 
@@ -113,7 +151,7 @@ increments remain compatible with the existing public route policy.
 |--------|------|---------|
 | `400` | `IDEMPOTENCY_KEY_REQUIRED` | The request has no `Idempotency-Key` header |
 | `400` | `INVALID_IDEMPOTENCY_KEY` | The key is not a valid UUID |
-| `400` | `INVALID_DELTA` | Delta is missing, non-positive, or malformed |
+| `400` | `INVALID_DELTA` | Delta is non-positive or malformed |
 | `400` | `DELTA_EXCEEDS_MAXIMUM` | Delta exceeds the counter's configured maximum |
 | `400` | `COUNTER_OVERFLOW` | The resulting counter value is outside the supported range |
 | `404` | `COUNTER_NOT_FOUND` | Counter does not exist for the tenant |
@@ -125,7 +163,8 @@ increments remain compatible with the existing public route policy.
 
 The V2 set operation uses the same mandatory idempotency key and durable
 operation contract. It records an audited adjustment from the current value to
-the requested value; it does not bypass the mutation history.
+the requested value; it does not bypass the mutation history. Requires
+`counter:adjust` or an administrator key. The `value` field is required.
 
 ```http
 POST /v2/tenants/{tenant_id}/counters/{counter_id}/set
@@ -156,7 +195,7 @@ An exact retry returns the same result with `replayed: true`.
 ## Operation History
 
 Returns completed operations for a counter in reverse chronological order.
-History is tenant-scoped and requires the API key.
+History requires a tenant-scoped key with `counter:history` or an administrator key.
 
 ```http
 GET /v2/tenants/{tenant_id}/counters/{counter_id}/operations?limit=50&cursor=...
@@ -223,8 +262,7 @@ Content-Type: application/json
 ```
 
 The `scopes` field is optional and defaults to read, increment, and history.
-Include `counter:create` if this key should create counters through the V1
-counter-creation route. An optional `expires_at` timestamp can limit credential
+Include `counter:create` if this key should create counters. An optional `expires_at` timestamp can limit credential
 lifetime.
 
 ### Rotate
@@ -267,50 +305,33 @@ been distributed to administrators and verified.
 
 ## Migrating from V1
 
-V1 route paths and response formats remain available while clients migrate.
-Tenant credentials now need `counter:read` for single-counter reads and
-`counter:list` for tenant counter enumeration.
+V1 is retired. Replace unversioned URLs with the V2 equivalents; there are no
+compatibility aliases or redirects. Counter and tenant IDs remain unchanged.
 
-| V1 route | V2 route or migration action |
-|---|---|
-| `POST /tenants` | Keep using it with an administrator key; tenant creation has no V2 replacement yet. |
-| `POST /tenants/{tenant_id}/counters` | Keep using it; grant a tenant key `counter:create` when delegated counter creation is needed. |
-| `GET /tenants/{tenant_id}/counters` | Keep using it with an administrator key or a tenant key granted `counter:list`. |
-| `GET /tenants/{tenant_id}/counters/{counter_id}` | Keep using it with `counter:read`, or use `GET /v2/tenants/{tenant_id}/counters/{counter_id}` with `counter:read`. |
-| `POST /tenants/{tenant_id}/counters/{counter_id}/inc` | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/inc` with `counter:increment` and a required `Idempotency-Key`. |
-| `POST /tenants/{tenant_id}/counters/{counter_id}/set` | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/set` with `counter:adjust` and a required `Idempotency-Key`. |
-| No V1 equivalent | `GET /v2/tenants/{tenant_id}/counters/{counter_id}/operations` with `counter:history`. |
+| Retired route | Supported route | Authorization |
+|---|---|---|
+| `POST /tenants` | `POST /v2/tenants` | Administrator |
+| `GET /tenants/{tenant_id}` | `GET /v2/tenants/{tenant_id}` | `tenant:read` or administrator |
+| `POST /tenants/{tenant_id}/counters` | `POST /v2/tenants/{tenant_id}/counters` | `counter:create` or administrator |
+| `GET /tenants/{tenant_id}/counters` | `GET /v2/tenants/{tenant_id}/counters` | `counter:list` or administrator |
+| `GET /tenants/{tenant_id}/counters/{counter_id}` | `GET /v2/tenants/{tenant_id}/counters/{counter_id}` | `counter:read` or administrator |
+| `POST /tenants/{tenant_id}/counters/{counter_id}/inc` | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/inc` | `counter:increment` or administrator; required UUID idempotency key |
+| `POST /tenants/{tenant_id}/counters/{counter_id}/set` | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/set` | `counter:adjust` or administrator; required UUID idempotency key |
 
-Credentials are not upgraded automatically. An existing credential with
-`counter:read` can continue reading individual counters, but needs to be
-replaced by a newly created credential with `counter:list` to enumerate
-counters.
+Tenant credentials must belong to the URL's tenant. Missing/invalid credentials
+return `401`; insufficient scopes or another tenant's credential return `403`.
+Grant `tenant:read` explicitly to clients that read tenant details; existing
+credential scopes are not changed automatically. Creation and credential
+lifecycle endpoints retain optional idempotency keys.
 
-The recommended migration sequence is:
-
-1. Keep the legacy administrator key enabled and use it to create an
-   administrator credential or tenant-scoped credentials.
-2. Grant each tenant credential only the scopes it needs. Include
-   `counter:list`, `counter:create`, or `counter:adjust` explicitly when
-   needed; they are not default scopes. Create a new credential with
-   `counter:list` if an existing credential needs list access.
-3. Migrate reads first, then mutations. For every V2 mutation, generate one
-   UUID idempotency key per logical operation and reuse it for retries.
-4. Verify operation history and replay behavior in a staging environment,
-   then switch production consumers gradually.
-5. After all protected clients use managed credentials, optionally set
-   `LEGACY_API_KEY_ENABLED=false`. This disables the environment key but does
-   not disable V1 routes.
-
-V1 mutations without an idempotency key remain supported, but retries can
-apply more than once. V2 mutations return the committed operation result and
-replay the original result when the same key and request are retried. V2
-counter reads may be served by the configured bounded cache; with the
-in-memory backend, another replica's write may remain unseen until cache
-invalidation reaches that process or the TTL expires.
+Creation replay records are scoped to the caller and URL. Finish outstanding
+V1 creation retries before switching paths: the old path's replay record is
+not reused at the new V2 URL. Existing increment/set operation history and
+idempotency keys remain tenant-scoped and are preserved.
 
 ## Reads and Consistency
 
-V2 reads are strong while served by the PostgreSQL primary. Future stale-capable
-or striped reads must expose their freshness/version metadata explicitly; they
-must not be presented as exact immediate counter values.
+Counter reads may use the configured bounded cache. A PostgreSQL cache miss
+reads from the primary; a cached result may be stale until invalidation or TTL
+expiry, particularly across replicas using independent in-memory caches.
+Tenant details and counter listing read PostgreSQL directly.

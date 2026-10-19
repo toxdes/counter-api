@@ -65,7 +65,7 @@ func TestRouterWithSentryConfig(t *testing.T) {
 
 			// Test that router can handle requests
 			ctx := &fasthttp.RequestCtx{}
-			ctx.Request.SetRequestURI("/tenants")
+			ctx.Request.SetRequestURI("/v2/tenants")
 			ctx.Request.Header.SetMethod("GET")
 
 			router.ServeHTTP(ctx)
@@ -108,7 +108,7 @@ func TestRouterSentryMiddlewareChain(t *testing.T) {
 	// Create multiple requests to trigger rate limit
 	for i := 0; i < 15; i++ {
 		ctx := &fasthttp.RequestCtx{}
-		ctx.Request.SetRequestURI("/tenants")
+		ctx.Request.SetRequestURI("/v2/tenants")
 		ctx.Request.Header.SetMethod("GET")
 		ctx.Request.Header.Set("X-Real-IP", "192.168.1.1")
 

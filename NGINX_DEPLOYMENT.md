@@ -97,7 +97,8 @@ sudo systemctl start counter
 
 ```bash
 # From your local machine
-curl -v https://api.yourdomain.com/tenants/test-tenant 2>&1 | grep -i "x-real-ip"
+curl -v -H "X-API-Key: $API_KEY" \
+  "https://api.yourdomain.com/v2/tenants/$TENANT_ID" 2>&1 | grep -i "x-real-ip"
 
 # The API does not echo this header; verify the normalized address in nginx or
 # application logs instead.
@@ -108,7 +109,9 @@ curl -v https://api.yourdomain.com/tenants/test-tenant 2>&1 | grep -i "x-real-ip
 ```bash
 # Make 11 POST requests
 for i in {1..11}; do
-  curl -X POST https://api.yourdomain.com/tenants/test/counters/test/inc
+  curl -X POST -H "X-API-Key: $API_KEY" \
+    -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
+    "https://api.yourdomain.com/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/inc"
 done
 
 # 11th request should return 429
@@ -296,7 +299,7 @@ server_tokens off;
 
 ```bash
 # Check if API is running
-curl http://localhost:8080/tenants/test-tenant
+curl http://localhost:8080/readyz
 
 # Check nginx is proxying correctly
 curl -H "Host: api.example.com" http://localhost/

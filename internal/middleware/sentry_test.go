@@ -21,13 +21,13 @@ func TestExtractContext(t *testing.T) {
 	}{
 		{
 			name:              "full path with tenant and counter",
-			path:              "/tenants/abc123/counters/def456",
+			path:              "/v2/tenants/abc123/counters/def456",
 			expectedTenantID:  "abc123",
 			expectedCounterID: "def456",
 		},
 		{
 			name:              "path with only tenant",
-			path:              "/tenants/abc123",
+			path:              "/v2/tenants/abc123",
 			expectedTenantID:  "abc123",
 			expectedCounterID: "",
 		},
@@ -132,7 +132,7 @@ func TestNewSentryHandler_PanicRecovery(t *testing.T) {
 
 	// Create test context
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("http://example.com/tenants/tenant1/counters/counter1")
+	ctx.Request.SetRequestURI("http://example.com/v2/tenants/tenant1/counters/counter1")
 
 	// This should not panic (it's recovered by middleware)
 	func() {
@@ -204,7 +204,7 @@ func TestNewSentryHandler_ErrorCapture(t *testing.T) {
 
 			// Create test context
 			ctx := &fasthttp.RequestCtx{}
-			ctx.Request.SetRequestURI("http://example.com/tenants/tenant1/counters/counter1")
+			ctx.Request.SetRequestURI("http://example.com/v2/tenants/tenant1/counters/counter1")
 
 			// Call handler
 			sentryHandler(ctx)
@@ -257,7 +257,7 @@ func TestExtractHeadersAllowlistExcludesSecrets(t *testing.T) {
 func TestScrubSentryEventRemovesRequestSecrets(t *testing.T) {
 	event := &sentry.Event{
 		Request: &sentry.Request{
-			URL:         "https://api.example.com/tenants/t1/counters/c1?api_key=secret",
+			URL:         "https://api.example.com/v2/tenants/t1/counters/c1?api_key=secret",
 			Data:        `{"api_key":"secret"}`,
 			QueryString: "api_key=secret",
 			Cookies:     "session=secret",
@@ -281,7 +281,7 @@ func TestScrubSentryEventRemovesRequestSecrets(t *testing.T) {
 	scrubbed := ScrubSentryEvent(event, nil)
 	require.NotNil(t, scrubbed)
 	require.NotNil(t, scrubbed.Request)
-	assert.Equal(t, "https://api.example.com/tenants/t1/counters/c1", scrubbed.Request.URL)
+	assert.Equal(t, "https://api.example.com/v2/tenants/t1/counters/c1", scrubbed.Request.URL)
 	assert.Empty(t, scrubbed.Request.Data)
 	assert.Empty(t, scrubbed.Request.QueryString)
 	assert.Empty(t, scrubbed.Request.Cookies)
@@ -330,7 +330,7 @@ func TestNewSentryHandler_ContextExtraction(t *testing.T) {
 
 	// Create test context
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("http://example.com/tenants/test_tenant/counters/test_counter")
+	ctx.Request.SetRequestURI("http://example.com/v2/tenants/test_tenant/counters/test_counter")
 
 	// Call handler
 	sentryHandler(ctx)

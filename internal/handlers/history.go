@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"counter/internal/contract"
 	"counter/internal/models"
 	"counter/internal/service"
 	"encoding/base64"
@@ -21,15 +20,9 @@ const (
 	maxOperationHistoryCursor    = 512
 )
 
-// OperationHistoryServiceHandler serves the V1-compatible implementation
-// shape for internal callers; the public route is registered as V2.
+// OperationHistoryServiceHandler serves tenant-scoped completed operation
+// history with strict cursor and page-size validation.
 func OperationHistoryServiceHandler(historyService service.OperationHistoryService) fasthttp.RequestHandler {
-	return OperationHistoryServiceHandlerVersioned(historyService, contract.V2)
-}
-
-// OperationHistoryServiceHandlerVersioned serves tenant-scoped completed
-// operation history with strict cursor and page-size validation.
-func OperationHistoryServiceHandlerVersioned(historyService service.OperationHistoryService, _ contract.Version) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		tenantID, ok := ctx.UserValue("tenant_id").(string)
 		if !ok || tenantID == "" {

@@ -62,16 +62,16 @@ func TestCounterReadAndListPermissionsAreSeparate(t *testing.T) {
 		router.ServeHTTP(ctx)
 		return ctx.Response.StatusCode()
 	}
-	if status := request(readCredential.APIKey, "/tenants/"+tenantID+"/counters/"+counterID); status != fasthttp.StatusOK {
+	if status := request(readCredential.APIKey, "/v2/tenants/"+tenantID+"/counters/"+counterID); status != fasthttp.StatusOK {
 		t.Errorf("counter:read GET status = %d, want 200", status)
 	}
-	if status := request(readCredential.APIKey, "/tenants/"+tenantID+"/counters"); status != fasthttp.StatusForbidden {
+	if status := request(readCredential.APIKey, "/v2/tenants/"+tenantID+"/counters"); status != fasthttp.StatusForbidden {
 		t.Errorf("counter:read list status = %d, want 403", status)
 	}
-	if status := request(listCredential.APIKey, "/tenants/"+tenantID+"/counters"); status != fasthttp.StatusOK {
+	if status := request(listCredential.APIKey, "/v2/tenants/"+tenantID+"/counters"); status != fasthttp.StatusOK {
 		t.Errorf("counter:list list status = %d, want 200", status)
 	}
-	if status := request(listCredential.APIKey, "/tenants/"+tenantID+"/counters/"+counterID); status != fasthttp.StatusForbidden {
+	if status := request(listCredential.APIKey, "/v2/tenants/"+tenantID+"/counters/"+counterID); status != fasthttp.StatusForbidden {
 		t.Errorf("counter:list GET status = %d, want 403", status)
 	}
 }
@@ -94,9 +94,9 @@ func TestAdminEndpointsRequireAuth(t *testing.T) {
 
 	router := NewRouter(db, corsConfig, rateLimiter, "test-key", logger, nil)
 
-	// Test POST /tenants without auth
+	// Test POST /v2/tenants without auth
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants")
+	ctx.Request.SetRequestURI("/v2/tenants")
 	ctx.Request.Header.SetMethod("POST")
 	ctx.Request.SetBody([]byte(`{"label": "blog"}`))
 	ctx.Request.Header.SetContentType("application/json")
@@ -107,19 +107,19 @@ func TestAdminEndpointsRequireAuth(t *testing.T) {
 		t.Errorf("Expected status 401 without auth, got %d", ctx.Response.StatusCode())
 	}
 
-	// Test GET /tenants/<id>/counters without auth
+	// Test GET /v2/tenants/<id>/counters without auth
 	ctx2 := &fasthttp.RequestCtx{}
-	ctx2.Request.SetRequestURI("/tenants/00000000-0000-0000-0000-000000000000/counters")
+	ctx2.Request.SetRequestURI("/v2/tenants/00000000-0000-0000-0000-000000000000/counters")
 	ctx2.Request.Header.SetMethod("GET")
 
 	router.ServeHTTP(ctx2)
 
 	if ctx2.Response.StatusCode() != fasthttp.StatusUnauthorized {
-		t.Errorf("Expected status 401 for GET /tenants/<id>/counters without auth, got %d", ctx2.Response.StatusCode())
+		t.Errorf("Expected status 401 for GET /v2/tenants/<id>/counters without auth, got %d", ctx2.Response.StatusCode())
 	}
 }
 
-func TestPublicEndpointsNoAuth(t *testing.T) {
+func TestTenantReadRequiresAuth(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 	defer cleanupTestDB(t, db)
@@ -141,16 +141,15 @@ func TestPublicEndpointsNoAuth(t *testing.T) {
 	tenantID := createTestTenant(t, db, "blog")
 	_ = createTestCounter(t, db, tenantID, "likes", 0)
 
-	// Test GET /tenants/{id} (no auth required)
+	// Tenant details require tenant:read or administrator access.
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID)
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID)
 	ctx.Request.Header.SetMethod("GET")
 
 	router.ServeHTTP(ctx)
 
-	// Should return 200 or 404 depending on if tenant exists
-	if ctx.Response.StatusCode() != fasthttp.StatusOK && ctx.Response.StatusCode() != fasthttp.StatusNotFound {
-		t.Errorf("Expected status 200 or 404, got %d", ctx.Response.StatusCode())
+	if ctx.Response.StatusCode() != fasthttp.StatusUnauthorized {
+		t.Errorf("Expected status 401, got %d", ctx.Response.StatusCode())
 	}
 }
 

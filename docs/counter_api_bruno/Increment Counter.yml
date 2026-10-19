@@ -5,10 +5,12 @@ info:
 
 http:
   method: POST
-  url: "{{BASE_URL}}/tenants/{{tenant_id}}/counters/{{counter_id}}/inc"
+  url: "{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/inc"
   headers:
     - name: Content-Type
       value: application/json
+    - name: X-Api-Key
+      value: "{{API_KEY}}"
     - name: Idempotency-Key
       value: 01912345-6789-7000-8000-000000000003
   auth: inherit
@@ -31,8 +33,8 @@ docs: |-
 
   Increments a counter value by a specified delta amount. Useful for tracking events like page views, clicks, or any countable metric.
 
-  **Authentication:** V1 keeps its existing route policy. New clients should
-  use V2 with a `counter:increment` scoped key and required idempotency key.
+  **Authentication:** Requires an administrator key or a tenant key with
+  `counter:increment`. A UUID idempotency key is required.
 
   **Rate Limit:** Controlled by the configured API rate limits.
 
@@ -45,7 +47,7 @@ docs: |-
     - Example: `?delta=5` increments by 5
 
   ## Headers
-  - `Idempotency-Key` (UUID, optional for V1): Reusing the same key and request returns the original result without applying the increment again
+  - `Idempotency-Key` (UUID, required): Reusing the same key and request returns the original result without applying the increment again
 
   ## Response (200 OK)
   ```json

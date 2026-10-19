@@ -10,7 +10,7 @@ import (
 
 func requestHashForBody(body string) []byte {
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants")
+	ctx.Request.SetRequestURI("/v2/tenants")
 	ctx.Request.SetBodyString(body)
 	return idempotencyRequestHash(ctx)
 }

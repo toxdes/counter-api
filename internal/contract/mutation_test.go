@@ -7,34 +7,31 @@ import (
 
 func TestValidateIdempotencyKeyContract(t *testing.T) {
 	tests := []struct {
-		name    string
-		version Version
-		key     string
-		wantErr error
+		name     string
+		required bool
+		key      string
+		wantErr  error
 	}{
 		{
-			name:    "v1 may omit key",
-			version: V1,
+			name: "optional key may be omitted",
 		},
 		{
-			name:    "v1 accepts UUID key",
-			version: V1,
-			key:     "01912345-6789-7000-8000-000000000001",
+			name: "optional UUID key is accepted",
+			key:  "01912345-6789-7000-8000-000000000001",
 		},
 		{
-			name:    "v2 requires key",
-			version: V2,
-			wantErr: ErrIdempotencyKeyRequired,
+			name:     "required key cannot be omitted",
+			required: true,
+			wantErr:  ErrIdempotencyKeyRequired,
 		},
 		{
-			name:    "v2 requires UUID key",
-			version: V2,
-			key:     "legacy-client-key",
-			wantErr: ErrInvalidIdempotencyKey,
+			name:     "required key must be a UUID",
+			required: true,
+			key:      "legacy-client-key",
+			wantErr:  ErrInvalidIdempotencyKey,
 		},
 		{
-			name:    "both versions reject invalid supplied key",
-			version: V1,
+			name:    "optional supplied key must be a UUID",
 			key:     "not-a-uuid",
 			wantErr: ErrInvalidIdempotencyKey,
 		},
@@ -42,7 +39,7 @@ func TestValidateIdempotencyKeyContract(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateIdempotencyKey(tt.version, tt.key)
+			err := ValidateIdempotencyKey(tt.key, tt.required)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("ValidateIdempotencyKey() error = %v, want %v", err, tt.wantErr)
 			}

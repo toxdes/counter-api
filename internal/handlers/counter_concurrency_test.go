@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 )
 
@@ -26,8 +27,9 @@ func TestIncrementCounterConcurrentTotal(t *testing.T) {
 			<-start
 
 			ctx := &fasthttp.RequestCtx{}
-			ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc")
+			ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID + "/inc")
 			ctx.Request.Header.SetMethod("POST")
+			ctx.Request.Header.Set("Idempotency-Key", uuid.NewString())
 			ctx.SetUserValue("tenant_id", tenantID)
 			ctx.SetUserValue("counter_id", counterID)
 

@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: "{{BASE_URL}}/tenants/{{tenant_id}}/counters"
+  url: "{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters"
   headers:
     - name: Content-Type
       value: application/json
@@ -45,9 +45,6 @@ docs: |-
   the `counter:create` scope.
 
   **Rate Limit:** 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)
-
-  Counter creation currently remains on the V1 route for compatibility. New
-  counter mutations and reads are documented under the V2 routes.
 
   ## URL Parameters
   - `tenant_id` (UUID, required): The unique identifier of the tenant

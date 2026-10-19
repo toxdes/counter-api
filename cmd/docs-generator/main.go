@@ -248,7 +248,12 @@ func endpointReferenceFor(req BrunoRequest) endpointReference {
 		"Create Tenant": {
 			requestHeaders: []apiDocRow{{"X-API-Key", "{{ADMIN_API_KEY}}", "Administrator key required."}, {"Content-Type", "application/json", "Request body is JSON."}},
 			requestBody:    []apiDocRow{{"label", `"production"`, "Required and unique. 1–255 characters; letters, numbers, spaces, hyphens, underscores, and periods."}}, responseHeaders: jsonHeader,
-			curl:         `curl --silent --show-error --request POST "$BASE_URL/tenants" --header "X-API-Key: $ADMIN_API_KEY" --header "Content-Type: application/json" --data-raw '{"label":"production"}'`,
+			curl:         `curl --silent --show-error --request POST "$BASE_URL/v2/tenants" --header "X-API-Key: $ADMIN_API_KEY" --header "Content-Type: application/json" --data-raw '{"label":"production"}'`,
+			responseJSON: `{"tenant_id":"01912345-6789-7000-8000-000000000001","label":"production","created_at":"2026-09-25T08:00:00Z","updated_at":"2026-09-25T08:00:00Z"}`,
+		},
+		"Get Tenant": {
+			requestHeaders: []apiDocRow{{tenantKey.key, tenantKey.value, "Requires `tenant:read` for this tenant or an administrator key."}}, responseHeaders: jsonHeader,
+			curl:         `curl --silent --show-error --request GET "$BASE_URL/v2/tenants/$TENANT_ID" --header "X-API-Key: $TENANT_API_KEY"`,
 			responseJSON: `{"tenant_id":"01912345-6789-7000-8000-000000000001","label":"production","created_at":"2026-09-25T08:00:00Z","updated_at":"2026-09-25T08:00:00Z"}`,
 		},
 		"Create Credential": {
@@ -260,12 +265,18 @@ func endpointReferenceFor(req BrunoRequest) endpointReference {
 		"Create Counter": {
 			requestHeaders: []apiDocRow{{"X-API-Key", "{{TENANT_API_KEY}}", "Administrator key or tenant key with `counter:create`."}, {"Content-Type", "application/json", "Request body is JSON."}},
 			requestBody:    []apiDocRow{{"label", `"daily_steps"`, "Optional; unique within this tenant, 1–255 characters."}, {"initial_value", "0", "Optional int64; defaults to 0."}, {"max_delta", "50", "Optional positive int64; defaults to 50 and must be at least 1."}}, responseHeaders: jsonHeader,
-			curl:         `curl --silent --show-error --request POST "$BASE_URL/tenants/$TENANT_ID/counters" --header "X-API-Key: $TENANT_API_KEY" --header "Content-Type: application/json" --data-raw '{"label":"daily_steps","initial_value":0,"max_delta":50}'`,
+			curl:         `curl --silent --show-error --request POST "$BASE_URL/v2/tenants/$TENANT_ID/counters" --header "X-API-Key: $TENANT_API_KEY" --header "Content-Type: application/json" --data-raw '{"label":"daily_steps","initial_value":0,"max_delta":50}'`,
 			responseJSON: `{"counter_id":"01912345-6789-7000-8000-000000000002","tenant_id":"01912345-6789-7000-8000-000000000001","label":"daily_steps","value":0,"max_delta":50,"created_at":"2026-09-25T08:00:00Z","updated_at":"2026-09-25T08:00:00Z"}`,
 		},
 		"Get Counter": {
 			requestHeaders: []apiDocRow{{tenantKey.key, tenantKey.value, "Tenant credentials require `counter:read`; administrator keys are also accepted."}}, responseHeaders: jsonHeader,
 			curl: `curl --silent --show-error --request GET "$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID" --header "X-API-Key: $TENANT_API_KEY"`, responseJSON: counterJSONSample,
+		},
+		"List Counters": {
+			requestHeaders: []apiDocRow{{tenantKey.key, tenantKey.value, "Requires `counter:list` for this tenant or an administrator key."}}, responseHeaders: jsonHeader,
+			queryParameters: []apiDocRow{{"limit", "20", "Optional page size, 1–100."}, {"cursor", "", "Optional opaque next_cursor from the preceding response."}},
+			curl:            `curl --silent --show-error --request GET "$BASE_URL/v2/tenants/$TENANT_ID/counters?limit=20" --header "X-API-Key: $TENANT_API_KEY"`,
+			responseJSON:    `{"counters":[],"next_cursor":null}`,
 		},
 		"Increment Counter": {
 			requestHeaders:  []apiDocRow{{tenantKey.key, tenantKey.value, "Requires `counter:increment`."}, {"Idempotency-Key", idem, "Required UUID; reuse only for retries of this same mutation."}},
@@ -357,7 +368,7 @@ func homepageSupplementalDocs(req BrunoRequest) string {
 }
 
 func homepageRequests(all []BrunoRequest) []BrunoRequest {
-	wanted := []string{"Create Tenant", "Create Credential", "Create Counter", "V2 Get Counter", "V2 Increment Counter", "V2 Set Counter", "V2 Operation History"}
+	wanted := []string{"Create Tenant", "Get Tenant", "Create Credential", "Create Counter", "List Counters", "Get Counter", "Increment Counter", "Set Counter", "V2 Operation History"}
 	byName := make(map[string]BrunoRequest, len(all))
 	for _, req := range all {
 		byName[req.Info.Name] = req

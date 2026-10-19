@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: "{{BASE_URL}}/tenants"
+  url: "{{BASE_URL}}/v2/tenants"
   headers:
     - name: Content-Type
       value: application/json

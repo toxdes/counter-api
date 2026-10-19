@@ -68,8 +68,8 @@ func TestOptionalIdempotencyForEveryNewMutationRoute(t *testing.T) {
 		status     int
 		credential bool
 	}{
-		{"tenant", "/tenants", `{"label":"keyed-tenant"}`, 201, false},
-		{"counter", "/tenants/" + tenantID + "/counters", `{"label":"keyed-counter","initial_value":7}`, 201, false},
+		{"tenant", "/v2/tenants", `{"label":"keyed-tenant"}`, 201, false},
+		{"counter", "/v2/tenants/" + tenantID + "/counters", `{"label":"keyed-counter","initial_value":7}`, 201, false},
 		{"tenant credential", credentialPath, `{}`, 201, true},
 		{"admin credential", "/v2/admin/credentials", `{}`, 201, true},
 		{"rotation", credentialPath + "/" + sourceID + "/rotate", "", 201, true},
@@ -134,7 +134,7 @@ func TestConcurrentIdempotencyAcrossReplicas(t *testing.T) {
 		name, path, body, idField string
 		credential                bool
 	}{
-		{"counter", "/tenants/" + tenantID + "/counters", `{"label":"concurrent","initial_value":11}`, "counter_id", false},
+		{"counter", "/v2/tenants/" + tenantID + "/counters", `{"label":"concurrent","initial_value":11}`, "counter_id", false},
 		{"credential", "/v2/tenants/" + tenantID + "/credentials", `{}`, "credential_id", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -188,7 +188,7 @@ func TestIdempotencyCanonicalPayloadFailuresAndExpiry(t *testing.T) {
 	db := testutil.OpenPostgres(t)
 	replica := idempotencyReplica(db)
 	tenantID := createTestTenant(t, db, "canonical-idempotency")
-	path := "/tenants/" + tenantID + "/counters"
+	path := "/v2/tenants/" + tenantID + "/counters"
 	key := uuid.NewString()
 	if response := callMutation(replica, path, key, `{"max_delta":-1}`, "test-key"); response.status != 400 {
 		t.Fatalf("invalid request status = %d", response.status)
@@ -222,8 +222,8 @@ func TestIdempotencyRecordFailureRollsBackMutation(t *testing.T) {
 	}
 	tenantID := createTestTenant(t, db, "rollback-idempotency")
 	for _, tc := range []struct{ path, body, table string }{
-		{"/tenants", `{"label":"rolled-back"}`, "tenants WHERE label = 'rolled-back'"},
-		{"/tenants/" + tenantID + "/counters", `{"label":"rolled-back"}`, "counters"},
+		{"/v2/tenants", `{"label":"rolled-back"}`, "tenants WHERE label = 'rolled-back'"},
+		{"/v2/tenants/" + tenantID + "/counters", `{"label":"rolled-back"}`, "counters"},
 		{"/v2/tenants/" + tenantID + "/credentials", `{}`, "api_credentials"},
 	} {
 		response := callMutation(replica, tc.path, uuid.NewString(), tc.body, "test-key")
@@ -243,7 +243,7 @@ func TestIdempotencyRecordFailureRollsBackMutation(t *testing.T) {
 	}
 }
 
-func TestIdempotencyAuthorizationScopeAndLegacyCompatibility(t *testing.T) {
+func TestIdempotencyAuthorizationScopeAndOptionalKeys(t *testing.T) {
 	db := testutil.OpenPostgres(t)
 	replica := idempotencyReplica(db)
 	tenantID := createTestTenant(t, db, "authorization-idempotency")
@@ -256,8 +256,8 @@ func TestIdempotencyAuthorizationScopeAndLegacyCompatibility(t *testing.T) {
 		t.Fatal("unkeyed creation behavior changed")
 	}
 	key := uuid.NewString()
-	created := callMutation(replica, "/tenants", key, `{"label":"admin-only"}`, "test-key")
-	denied := callMutation(replica, "/tenants", key, `{"label":"admin-only"}`, firstFields["api_key"].(string))
+	created := callMutation(replica, "/v2/tenants", key, `{"label":"admin-only"}`, "test-key")
+	denied := callMutation(replica, "/v2/tenants", key, `{"label":"admin-only"}`, firstFields["api_key"].(string))
 	if created.status != 201 || denied.status != 403 || denied.replayed != "" {
 		t.Fatalf("replay bypassed authorization: status=%d", denied.status)
 	}
@@ -277,9 +277,9 @@ func TestIdempotencyAuthorizationScopeAndLegacyCompatibility(t *testing.T) {
 	if denied.status != 401 || denied.replayed != "" {
 		t.Fatalf("revoked caller retrieved replay: status=%d", denied.status)
 	}
-	counter := callMutation(replica, "/tenants/"+tenantID+"/counters", "", `{"label":"reads"}`, "test-key")
+	counter := callMutation(replica, "/v2/tenants/"+tenantID+"/counters", "", `{"label":"reads"}`, "test-key")
 	counterID := responseFields(t, counter)["counter_id"].(string)
-	for _, path := range []string{"/", "/tools/curl", "/livez", "/readyz", "/metrics", "/tenants/" + tenantID, "/tenants/" + tenantID + "/counters", "/tenants/" + tenantID + "/counters/" + counterID, "/v2/tenants/" + tenantID + "/counters/" + counterID, "/v2/tenants/" + tenantID + "/counters/" + counterID + "/operations"} {
+	for _, path := range []string{"/", "/tools/curl", "/livez", "/readyz", "/metrics", "/v2/tenants/" + tenantID, "/v2/tenants/" + tenantID + "/counters", "/v2/tenants/" + tenantID + "/counters/" + counterID, "/v2/tenants/" + tenantID + "/counters/" + counterID, "/v2/tenants/" + tenantID + "/counters/" + counterID + "/operations"} {
 		ctx := &fasthttp.RequestCtx{}
 		ctx.Request.SetRequestURI(path)
 		ctx.Request.Header.SetMethod("GET")
@@ -307,7 +307,7 @@ func TestIdempotencyAuthorizationScopeAndLegacyCompatibility(t *testing.T) {
 func TestIdempotencyLockTimeoutAndScopeIsolation(t *testing.T) {
 	db := testutil.OpenPostgres(t)
 	tenantID := createTestTenant(t, db, "lock-idempotency")
-	path := "/tenants/" + tenantID + "/counters"
+	path := "/v2/tenants/" + tenantID + "/counters"
 	key := uuid.NewString()
 	tx, err := db.BeginTxx(context.Background(), nil)
 	if err != nil {
@@ -330,7 +330,7 @@ func TestIdempotencyLockTimeoutAndScopeIsolation(t *testing.T) {
 		t.Fatalf("retry after timeout failed: status=%d", first.status)
 	}
 	otherTenant := createTestTenant(t, db, "other-idempotency")
-	other := callMutation(replica, "/tenants/"+otherTenant+"/counters", key, `{"label":"locked"}`, "test-key")
+	other := callMutation(replica, "/v2/tenants/"+otherTenant+"/counters", key, `{"label":"locked"}`, "test-key")
 	if other.status != 201 || responseFields(t, other)["counter_id"] == responseFields(t, first)["counter_id"] {
 		t.Fatal("different tenants shared a replay record")
 	}

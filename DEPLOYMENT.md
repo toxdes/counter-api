@@ -113,7 +113,8 @@ ranges, and update the nginx allowlist when Cloudflare changes them.
 # Make 11 requests rapidly
 for i in {1..11}; do
   curl -w "Status: %{http_code}\n" -X POST \
-    http://localhost:8080/tenants/test/counters/test/inc
+    -H "X-API-Key: $API_KEY" -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
+    "http://localhost:8080/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/inc"
 done
 ```
 

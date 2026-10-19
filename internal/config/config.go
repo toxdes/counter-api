@@ -99,7 +99,7 @@ func Load() (*Config, error) {
 		MaxRequestBodyBytes:           getEnvInt("MAX_REQUEST_BODY_BYTES", 64*1024),
 
 		APIKey: getEnv("API_KEY", ""),
-		// Keep the environment key enabled by default for V1 compatibility.
+		// Keep the environment administrator key enabled for bootstrap access.
 		// Operators can disable it after migrating to managed credentials.
 		LegacyAPIKeyEnabled: getEnvBool("LEGACY_API_KEY_ENABLED", true),
 

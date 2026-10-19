@@ -3,12 +3,25 @@
 
 from __future__ import annotations
 
+import json
 import unittest
+from unittest.mock import Mock
 
 import scalability_load
 
 
 class PercentileTests(unittest.TestCase):
+    def test_materialized_value_uses_uncached_v2_listing(self) -> None:
+        client = Mock()
+        client.request.side_effect = [
+            (200, json.dumps({"counters": [{"counter_id": "other", "value": 1}], "next_cursor": "next"}).encode(), 0.0),
+            (200, json.dumps({"counters": [{"counter_id": "target", "value": 9007199254740993}], "next_cursor": None}).encode(), 0.0),
+        ]
+        target = scalability_load.CounterTarget(tenant_id="tenant", counter_id="target")
+        self.assertEqual(scalability_load.fetch_current_value(client, target), 9007199254740993)
+        self.assertEqual(client.request.call_args_list[0].args, ("GET", "/v2/tenants/tenant/counters?limit=100"))
+        self.assertEqual(client.request.call_args_list[1].args, ("GET", "/v2/tenants/tenant/counters?limit=100&cursor=next"))
+
     def test_percentile_reports_nearest_rank_value(self) -> None:
         self.assertEqual(scalability_load.percentile([4, 1, 3, 2], 0.95), 4)
 
