@@ -11,6 +11,7 @@ import (
 	"counter/internal/router"
 	"counter/internal/service"
 	"counter/internal/store"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -32,6 +33,7 @@ var Version = "dev"
 func main() {
 	// Define CLI flags
 	versionFlag := flag.Bool("version", false, "Print version information")
+	envFlag := flag.String("env", ".env", "Load environment variables from this dotenv file (existing environment takes precedence)")
 	migrateFlag := flag.String("db-migrate", "", "Run database migrations (up or down)")
 	reconcileFlag := flag.Bool("reconcile", false, "Reconcile counters against completed operation history")
 	flag.Parse()
@@ -42,8 +44,17 @@ func main() {
 		return
 	}
 
-	// Load .env file if present (for local development)
-	_ = godotenv.Load()
+	// The default .env remains optional. An explicitly selected file must load
+	// successfully; silently falling back could target the wrong deployment.
+	envExplicit := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "env" {
+			envExplicit = true
+		}
+	})
+	if err := loadEnvironmentFile(*envFlag, envExplicit); err != nil {
+		log.Fatal(err)
+	}
 
 	// Load configuration
 	cfg, err := config.Load()
@@ -311,6 +322,20 @@ func main() {
 			log.Printf("Server stopped unexpectedly: %v", err)
 		}
 	}
+}
+
+// loadEnvironmentFile uses dotenv syntax, never shell evaluation. Keep parser
+// details out of errors because godotenv may include secret file contents.
+func loadEnvironmentFile(path string, required bool) error {
+	err := godotenv.Load(path)
+	if err == nil || !required {
+		return nil
+	}
+	var fileError *os.PathError
+	if errors.As(err, &fileError) {
+		return fmt.Errorf("load environment file: %w", fileError)
+	}
+	return fmt.Errorf("load environment file %q: invalid dotenv syntax", path)
 }
 
 func databaseURLForCommand(runtimeURL, migrationURL string, isMigration bool) string {
