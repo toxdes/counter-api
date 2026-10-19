@@ -16,6 +16,19 @@ permissions. PostgreSQL row-level security isolates tenant-owned rows.
    `MIGRATION_DATABASE_URL` to the owner connection, and set `API_KEY`.
 3. Run `make build`, `./counter --db-migrate=up`, then `./counter`.
 
+To load a dotenv file from another location, use `--env /path/to/counter.env`.
+It works for the server, migrations, and reconciliation:
+
+```bash
+sudo -u countersrv /path/to/counter --env /etc/counter/runtime.env
+sudo -u countersrv /path/to/counter --env /etc/counter/migration.env --db-migrate=up
+```
+
+Existing process environment variables take precedence. An explicitly supplied
+file must be readable and valid; without `--env`, the optional `.env` in the
+working directory keeps its existing behavior. The selected file replaces that
+default file. Env files are parsed as dotenv data, not executed as shell code.
+
 ## References
 
 - [V2 API contract](docs/api-v2.md) — endpoint reference and V1 migration map.

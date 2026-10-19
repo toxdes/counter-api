@@ -125,6 +125,23 @@ ALTER DATABASE counter_api OWNER TO counter_owner;
 
 ### 2. Configure Environment
 
+The binary accepts `--env /absolute/path/to/counter.env` for server, migration,
+and reconciliation commands. The service user must be able to read the file.
+Existing process environment variables (including systemd `EnvironmentFile`
+values) take precedence over this file. An explicitly selected file is required:
+missing/unreadable files or invalid dotenv syntax stop startup. Without the
+flag, the optional `.env` in the working directory retains its existing behavior.
+An explicit file replaces `.env`; the two files are not merged. Files use dotenv
+syntax and are never executed as shell scripts.
+
+```bash
+sudo -u countersrv /path/to/counter --env /etc/counter/migration.env --db-migrate=up
+```
+
+Use a separate migration file containing the owner `MIGRATION_DATABASE_URL`
+when the runtime file intentionally excludes owner credentials. `--version`
+and `--help` do not require loading environment files.
+
 Create `.env` file:
 
 ```bash
@@ -604,11 +621,12 @@ creation retries before changing URLs because creation replay records are
 path-scoped. See the migration map in `docs/api-v2.md`.
 
 Before an upgrade, check the database schema version and take a backup. This
-binary requires schema version 8; it refuses to start if the database is behind or
+binary requires schema version 10; it refuses to start if the database is behind or
 ahead. Check the deployed schema before upgrading. If needed, run the new
-binary's `--db-migrate=up` with the same `DATABASE_URL` and `API_KEY` as the
-service before starting it; for a local `.env`, run it from the service's
-working directory. V1 retirement itself adds no database migration.
+binary's `--db-migrate=up` with an owner `MIGRATION_DATABASE_URL` before starting
+it. Use `--env` to load the migration environment from its actual path.
+V1 retirement itself adds no database migration; metadata/RLS adds migrations
+9 and 10, which require the coordinated rollout described above.
 
 For a single VPS, build the binary for the server architecture, upload it to a
 temporary path, stop the service, replace the executable, then start and check
@@ -617,8 +635,8 @@ it. For example:
 ```bash
 sudo systemctl stop counter
 # If required, apply migrations using the new binary and the service environment.
-# Example when /opt/counter/.env is loaded by godotenv:
-cd /opt/counter && sudo -u counterapi /tmp/counter-new --db-migrate=up
+# The migration file supplies the owner MIGRATION_DATABASE_URL.
+sudo -u counterapi /tmp/counter-new --env /etc/counter/migration.env --db-migrate=up
 sudo install -m 0755 /tmp/counter-new /opt/counter/counter
 sudo systemctl start counter
 sudo systemctl status counter
