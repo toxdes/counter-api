@@ -179,6 +179,8 @@ func normalizeCredentialScopes(scopes []string) ([]string, error) {
 		"counter:increment": true,
 		"counter:adjust":    true,
 		"counter:history":   true,
+		"metadata:read":     true,
+		"metadata:write":    true,
 	}
 	seen := make(map[string]bool, len(scopes))
 	result := make([]string, 0, len(scopes))

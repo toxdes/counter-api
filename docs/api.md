@@ -21,6 +21,9 @@ return `401`; insufficient scopes or another tenant's credential return `403`.
 | Increment | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/inc` | `counter:increment` |
 | Set value | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/set` | `counter:adjust` |
 | Read history | `GET /v2/tenants/{tenant_id}/counters/{counter_id}/operations` | `counter:history` |
+| Read metadata | `GET /v2/tenants/{tenant_id}/counters/{counter_id}/metadata` | `metadata:read` |
+| Create/replace metadata | `PUT /v2/tenants/{tenant_id}/counters/{counter_id}/metadata` | `metadata:write` |
+| Delete metadata | `DELETE /v2/tenants/{tenant_id}/counters/{counter_id}/metadata` | `metadata:write` |
 | Create tenant credential | `POST /v2/tenants/{tenant_id}/credentials` | Administrator only |
 | Rotate credential | `POST /v2/tenants/{tenant_id}/credentials/{credential_id}/rotate` | Administrator only |
 | Revoke credential | `POST /v2/tenants/{tenant_id}/credentials/{credential_id}/revoke` | Administrator only |
@@ -34,7 +37,7 @@ credential scopes are `counter:read`, `counter:increment`, and
 ## Idempotency coverage
 
 Generate a UUID for each logical write and reuse it for retries. Support is
-optional on tenant creation, counter creation, and all credential lifecycle
+optional on tenant creation, counter creation, metadata writes, and all credential lifecycle
 routes. Omitting the header preserves existing behavior. Counter increment/set
 require the header.
 
@@ -43,13 +46,14 @@ require the header.
 | `POST /v2/tenants` | Optional; replay the original tenant response. |
 | `POST /v2/tenants/{tenant_id}/counters` | Optional; replay the original counter response. |
 | Counter `/inc` and `/set` | Required; use existing durable operation-history replay. |
+| Metadata `PUT` and `DELETE` | Optional; replay the original response and ETag. Preconditions are part of the request identity. |
 | `POST /v2/tenants/{tenant_id}/credentials` | Optional; replay credential fields with `api_key` omitted. |
 | `POST /v2/admin/credentials` | Optional; replay credential fields with `api_key` omitted. |
 | `POST /v2/tenants/{tenant_id}/credentials/{credential_id}/rotate` | Optional; replay replacement credential fields with `api_key` omitted. |
 | `POST /v2/tenants/{tenant_id}/credentials/{credential_id}/revoke` | Optional; replay the original `204`, even after revocation. |
 | All `GET` routes and `OPTIONS` | Ignore the header; do not reserve keys or cache responses for replay. |
 
-For creation and credential routes:
+For creation, metadata, and credential routes:
 
 - Keys must be UUIDs and are scoped to the authenticated credential, HTTP
   method, and target path. Use the same credential and URL for retries.
@@ -80,6 +84,24 @@ expired or revoked credential; it reports the original issuance result.
 Counter increment/set keep their existing tenant-wide key scope, `replayed`
 response field, and operation-history retention. They do not use the new
 24-hour replay table or `Idempotency-Replayed` header.
+
+## Optional counter metadata
+
+Each counter can have one independent JSON document in a separate table. Accepts
+objects, arrays, scalars, and JSON `null`, up to 64 KiB and 64 nesting levels,
+subject to PostgreSQL JSONB representation limits. JSON `null` is a stored
+document; deleting the document removes it. Documents cannot be shared between
+counters. Count reads and listings keep their existing response format and do
+not fetch metadata.
+
+Use the `/metadata` routes with explicit `metadata:read` or `metadata:write`
+scopes; existing/default counter scopes do not grant metadata access. GET
+returns a document envelope and a quoted opaque `ETag`. Send the raw JSON value
+to PUT with `If-None-Match: *` to create, or `If-Match: <ETag>` to replace.
+DELETE requires `If-Match: <ETag>`. Missing conditions return `428`, malformed
+conditions `400`, and stale conditions `412`. Obtain a fresh ETag after `412`.
+Metadata responses use `Cache-Control: no-store`; browsers can read `ETag`.
+See [metadata examples](api-v2.md#counter-metadata).
 
 ## Operations and Health
 

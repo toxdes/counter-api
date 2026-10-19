@@ -70,7 +70,7 @@ func TestCurlBuilderHandlerServesCommandBuilder(t *testing.T) {
 	if !strings.Contains(body, `value="counter:read" checked`) {
 		t.Error("counter:read should be selected by default in the credential builder")
 	}
-	for _, scope := range []string{"tenant:read", "counter:list", "counter:create", "counter:increment", "counter:adjust", "counter:history"} {
+	for _, scope := range []string{"tenant:read", "counter:list", "counter:create", "counter:increment", "counter:adjust", "counter:history", "metadata:read", "metadata:write"} {
 		if strings.Contains(body, `value="`+scope+`" checked`) {
 			t.Errorf("%s should not be selected by default in the credential builder", scope)
 		}

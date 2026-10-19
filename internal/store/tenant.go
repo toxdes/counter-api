@@ -49,7 +49,7 @@ func (s *TenantStore) CreateTenant(ctx context.Context, tenant *models.Tenant) e
 
 func (s *TenantStore) GetTenant(ctx context.Context, id string) (*models.Tenant, error) {
 	var tenant models.Tenant
-	err := s.db.GetContext(ctx, &tenant,
+	err := database.ExecutorFor(ctx, s.db).GetContext(ctx, &tenant,
 		"SELECT id, label, created_at, updated_at FROM tenants WHERE id = $1",
 		id,
 	)

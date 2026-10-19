@@ -1,0 +1,25 @@
+info:
+  name: Get Metadata
+  type: http
+  seq: 10
+
+http:
+  method: GET
+  url: "{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/metadata"
+  headers:
+    - name: X-Api-Key
+      value: "{{API_KEY}}"
+  auth: inherit
+
+docs: |-
+  # Get Metadata
+
+  Reads a counter's optional independent JSON document. Requires `metadata:read`
+  or an administrator key. Counter read permissions do not grant metadata access.
+  Returns a document envelope with `data`, `version`, tenant/counter IDs, and
+  timestamps. Response headers include a quoted opaque `ETag` and
+  `Cache-Control: no-store`. Save the ETag for a later edit.
+
+  Any JSON value, including null, can be stored. Missing metadata returns
+  `404 METADATA_NOT_FOUND`; a missing counter returns `404 COUNTER_NOT_FOUND`.
+  Metadata is not included in regular counter responses or operation history.

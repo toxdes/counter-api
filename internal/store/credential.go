@@ -39,6 +39,12 @@ func NewCredentialStore(db *database.DB) *CredentialStore {
 	return &CredentialStore{db: db}
 }
 
+// LookupCredential is the narrow pre-authentication lookup. Unlike credential
+// management it has no tenant/admin authority and cannot read another ID.
+func (s *CredentialStore) LookupCredential(ctx context.Context, credentialID string) (*models.APICredential, error) {
+	return s.GetActiveCredential(database.WithAccess(ctx, database.Access{AuthenticationID: credentialID}), credentialID)
+}
+
 func (s *CredentialStore) GetActiveCredential(ctx context.Context, credentialID string) (*models.APICredential, error) {
 	var row credentialRow
 	err := database.ExecutorFor(ctx, s.db).GetContext(ctx, &row, `
@@ -70,7 +76,7 @@ func (s *CredentialStore) GetActiveCredential(ctx context.Context, credentialID 
 }
 
 func (s *CredentialStore) CreateCredential(ctx context.Context, credential *models.APICredential) error {
-	_, err := insertCredential(ctx, s.db, credential)
+	_, err := insertCredential(ctx, database.ExecutorFor(ctx, s.db), credential)
 	if err != nil {
 		return mapCredentialWriteError(err)
 	}
@@ -121,7 +127,7 @@ func mapCredentialWriteError(err error) error {
 }
 
 func (s *CredentialStore) RevokeCredential(ctx context.Context, credentialID string, revokedAt time.Time) error {
-	result, err := s.db.ExecContext(ctx, `
+	result, err := database.ExecutorFor(ctx, s.db).ExecContext(ctx, `
 		UPDATE api_credentials
 		SET revoked_at = $2
 		WHERE id = $1 AND revoked_at IS NULL
@@ -170,7 +176,7 @@ func (s *CredentialStore) RevokeCredentialAndAudit(ctx context.Context, credenti
 }
 
 func (s *CredentialStore) CreateAuthAuditEvent(ctx context.Context, event *models.AuthAuditEvent) error {
-	_, err := insertAuthAuditEvent(ctx, s.db, event)
+	_, err := insertAuthAuditEvent(ctx, database.ExecutorFor(ctx, s.db), event)
 	if err != nil {
 		return fmt.Errorf("create auth audit event: %w", err)
 	}

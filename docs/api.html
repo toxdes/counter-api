@@ -90,6 +90,9 @@
 <a href="#increment-counter">Increment Counter</a>
 <a href="#set-counter">Set Counter</a>
 <a href="#operation-history">Operation History</a>
+<a href="#get-metadata">Get Metadata</a>
+<a href="#put-metadata">Put Metadata</a>
+<a href="#delete-metadata">Delete Metadata</a>
 </nav>
 <div class="endpoint-list">
 <article class="endpoint" id="create-tenant">
@@ -191,7 +194,7 @@
 </tbody></table></div>
 <h4>Request body</h4>
 <div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
-<tr><td><code>scopes</code></td><td><code>[&#34;counter:read&#34;, &#34;counter:increment&#34;, &#34;counter:history&#34;]</code></td><td>Optional; supports <code>tenant:read</code>, <code>counter:read</code>, <code>counter:list</code>, <code>counter:create</code>, <code>counter:increment</code>, <code>counter:adjust</code>, and <code>counter:history</code>. Defaults to read, increment, and history; listing is not granted by default.</td></tr>
+<tr><td><code>scopes</code></td><td><code>[&#34;counter:read&#34;, &#34;counter:increment&#34;, &#34;counter:history&#34;]</code></td><td>Optional; supports <code>tenant:read</code>, <code>counter:read</code>, <code>counter:list</code>, <code>counter:create</code>, <code>counter:increment</code>, <code>counter:adjust</code>, <code>counter:history</code>, <code>metadata:read</code>, and <code>metadata:write</code>. Defaults to read, increment, and history; listing is not granted by default.</td></tr>
 <tr><td><code>expires_at</code></td><td><code>&#34;2026-12-31T23:59:59Z&#34;</code></td><td>Optional expiration timestamp; omitted for a non-expiring credential.</td></tr>
 </tbody></table></div>
 <h4>Response headers</h4>
@@ -211,7 +214,7 @@
     &#34;counter:history&#34;
   ]
 }</code></pre>
-<p>Creates a tenant-scoped key. Requires the administrator API key. The secret is returned once; store it securely. Supported scopes: <code>tenant:read</code>, <code>counter:read</code>, <code>counter:list</code>, <code>counter:create</code>, <code>counter:increment</code>, <code>counter:adjust</code>, and <code>counter:history</code>. By default, keys receive read, increment, and history scopes; listing, counter creation, and adjustment must be granted explicitly.</p>
+<p>Creates a tenant-scoped key. Requires the administrator API key. The secret is returned once; store it securely. Supported scopes: <code>tenant:read</code>, <code>counter:read</code>, <code>counter:list</code>, <code>counter:create</code>, <code>counter:increment</code>, <code>counter:adjust</code>, <code>counter:history</code>, <code>metadata:read</code>, and <code>metadata:write</code>. By default, keys receive read, increment, and history scopes; listing, counter creation, adjustment, and metadata access must be granted explicitly.</p>
 
             </div>
         </article>
@@ -499,6 +502,129 @@
 <p>Returns paginated, reverse-chronological counter operations. Requires a</p>
 <p>tenant-scoped credential with <code>counter:history</code>.</p>
 <p>Pass the opaque <code>next_cursor</code> from a response unchanged to fetch the next</p>
+
+            </div>
+        </article>
+<article class="endpoint" id="get-metadata">
+            <div class="endpoint-header">
+                <span class="method">GET</span>
+                <h3 class="endpoint-title">Get Metadata</h3>
+            </div>
+            <div class="endpoint-url"><code>GET {base_url}/v2/tenants/{tenant_id}/counters/{counter_id}/metadata</code></div>
+            <div class="endpoint-content">
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{TENANT_API_KEY}}</code></td><td>Requires metadata:read or an administrator key.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>Document envelope.</td></tr>
+<tr><td><code>ETag</code></td><td><code>&#34;&lt;version&gt;&#34;</code></td><td>Opaque version; preserve quotes for If-Match.</td></tr>
+<tr><td><code>Cache-Control</code></td><td><code>no-store</code></td><td>Metadata is never cached.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --include &#34;$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/metadata&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34;</code></pre>
+<h4>Sample response</h4>
+<pre class="api-sample"><code class="language-json">{
+  &#34;tenant_id&#34;: &#34;01912345-6789-7000-8000-000000000001&#34;,
+  &#34;counter_id&#34;: &#34;01912345-6789-7000-8000-000000000002&#34;,
+  &#34;data&#34;: {
+    &#34;color&#34;: &#34;blue&#34;
+  },
+  &#34;version&#34;: &#34;b858fc63-a09a-4ec2-922e-4e91629122dd&#34;,
+  &#34;created_at&#34;: &#34;2026-10-19T10:00:00Z&#34;,
+  &#34;updated_at&#34;: &#34;2026-10-19T10:00:00Z&#34;
+}</code></pre>
+<p>Reads a counter&#39;s optional independent JSON document. Requires <code>metadata:read</code></p>
+<p>or an administrator key. Counter read permissions do not grant metadata access.</p>
+<p>Returns a document envelope with <code>data</code>, <code>version</code>, tenant/counter IDs, and</p>
+<p>timestamps. Response headers include a quoted opaque <code>ETag</code> and</p>
+<p><code>Cache-Control: no-store</code>. Save the ETag for a later edit.</p>
+<p>Any JSON value, including null, can be stored. Missing metadata returns</p>
+<p><code>404 METADATA_NOT_FOUND</code>; a missing counter returns <code>404 COUNTER_NOT_FOUND</code>.</p>
+<p>Metadata is not included in regular counter responses or operation history.</p>
+
+            </div>
+        </article>
+<article class="endpoint" id="put-metadata">
+            <div class="endpoint-header">
+                <span class="method">PUT</span>
+                <h3 class="endpoint-title">Put Metadata</h3>
+            </div>
+            <div class="endpoint-url"><code>PUT {base_url}/v2/tenants/{tenant_id}/counters/{counter_id}/metadata</code></div>
+            <div class="endpoint-content">
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{TENANT_API_KEY}}</code></td><td>Requires metadata:write or an administrator key.</td></tr>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>Raw JSON value.</td></tr>
+<tr><td><code>If-None-Match</code></td><td><code>*</code></td><td>Required to create. For replacement, send If-Match with the quoted current ETag instead.</td></tr>
+<tr><td><code>Idempotency-Key</code></td><td><code>{{UUID_IDEMPOTENCY_KEY}}</code></td><td>Optional UUID. Retain the body and conditions for retries.</td></tr>
+</tbody></table></div>
+<h4>Request body</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>(raw value)</code></td><td><code>{&#34;color&#34;:&#34;blue&#34;}</code></td><td>Any JSON value, at most 64 KiB and 64 nesting levels; JSONB limits apply.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>Document envelope.</td></tr>
+<tr><td><code>ETag</code></td><td><code>&#34;&lt;version&gt;&#34;</code></td><td>Opaque version; preserve quotes for If-Match.</td></tr>
+<tr><td><code>Cache-Control</code></td><td><code>no-store</code></td><td>Metadata is never cached.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --include --request PUT &#34;$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/metadata&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34; --header &#34;Content-Type: application/json&#34; --header &#39;If-None-Match: *&#39; --header &#34;Idempotency-Key: $IDEMPOTENCY_KEY&#34; --data-raw &#39;{&#34;color&#34;:&#34;blue&#34;}&#39;</code></pre>
+<h4>Sample response</h4>
+<pre class="api-sample"><code class="language-json">{
+  &#34;tenant_id&#34;: &#34;01912345-6789-7000-8000-000000000001&#34;,
+  &#34;counter_id&#34;: &#34;01912345-6789-7000-8000-000000000002&#34;,
+  &#34;data&#34;: {
+    &#34;color&#34;: &#34;blue&#34;
+  },
+  &#34;version&#34;: &#34;b858fc63-a09a-4ec2-922e-4e91629122dd&#34;,
+  &#34;created_at&#34;: &#34;2026-10-19T10:00:00Z&#34;,
+  &#34;updated_at&#34;: &#34;2026-10-19T10:00:00Z&#34;
+}</code></pre>
+<p>Creates or fully replaces a document. Requires <code>metadata:write</code> or an</p>
+<p>administrator key. Send raw JSON: object, array, scalar, or null, up to</p>
+<p>64 KiB and 64 nesting levels, subject to PostgreSQL JSONB limits.</p>
+<p>To create, send <code>If-None-Match: *</code> for a <code>201</code> response. To replace, remove</p>
+<p>that header and send <code>If-Match</code> with the exact quoted ETag from GET for <code>200</code>.</p>
+<p>Both responses contain the document envelope and a new ETag. Changes do not</p>
+<p>affect the counter value. Properties omitted from a replacement are removed.</p>
+<p>Missing preconditions return <code>428</code>, malformed conditions <code>400</code>, stale ETags</p>
+<p>or creation against an existing document <code>412</code>. Invalid JSON returns <code>400</code>;</p>
+<p>oversized documents return <code>413</code>.</p>
+<p><code>Idempotency-Key</code> is optional. Reuse a UUID with the same body and conditional</p>
+<p>headers to recover the original response/ETag for 24 hours. Changed headers</p>
+<p>with the same key return <code>409</code>. Replay returns the original version even if</p>
+<p>later edits occurred; GET before starting a new edit.</p>
+
+            </div>
+        </article>
+<article class="endpoint" id="delete-metadata">
+            <div class="endpoint-header">
+                <span class="method">DELETE</span>
+                <h3 class="endpoint-title">Delete Metadata</h3>
+            </div>
+            <div class="endpoint-url"><code>DELETE {base_url}/v2/tenants/{tenant_id}/counters/{counter_id}/metadata</code></div>
+            <div class="endpoint-content">
+<h4>Request headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>X-API-Key</code></td><td><code>{{TENANT_API_KEY}}</code></td><td>Requires metadata:write or an administrator key.</td></tr>
+<tr><td><code>If-Match</code></td><td><code>&#34;&lt;version&gt;&#34;</code></td><td>Required exact quoted ETag from GET.</td></tr>
+<tr><td><code>Idempotency-Key</code></td><td><code>{{UUID_IDEMPOTENCY_KEY}}</code></td><td>Optional UUID; retry with the same conditional header.</td></tr>
+</tbody></table></div>
+<h4>Response headers</h4>
+<div class="api-table-wrap"><table class="api-table"><thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col">Description</th></tr></thead><tbody>
+<tr><td><code>Cache-Control</code></td><td><code>no-store</code></td><td>204 response has no body.</td></tr>
+</tbody></table></div>
+<h4>Sample request</h4>
+<pre class="api-sample"><code class="language-bash">curl --silent --show-error --include --request DELETE &#34;$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/metadata&#34; --header &#34;X-API-Key: $TENANT_API_KEY&#34; --header &#34;If-Match: $METADATA_ETAG&#34; --header &#34;Idempotency-Key: $IDEMPOTENCY_KEY&#34;</code></pre>
+<p>Removes the document without changing the counter. Requires <code>metadata:write</code></p>
+<p>or an administrator key and the current quoted ETag in <code>If-Match</code>.</p>
+<p>Success returns <code>204</code> with no body. Missing conditions return <code>428</code>, malformed</p>
+<p>conditions <code>400</code>, and stale or absent documents <code>412</code>.</p>
+<p><code>Idempotency-Key</code> is optional. Keyed retries replay the original <code>204</code> for</p>
+<p>24 hours. Deleting then recreating metadata generates a fresh ETag.</p>
 
             </div>
         </article>

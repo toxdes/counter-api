@@ -110,8 +110,17 @@ func main() {
 		}
 	}
 
+	schemaVersion, err := migrations.VerifySchemaCompatibility(context.Background(), db)
+	if err != nil {
+		log.Fatalf("Database schema is not compatible: %v", err)
+	}
+	if err := database.VerifyRuntimeRole(context.Background(), db); err != nil {
+		log.Fatalf("Unsafe runtime database role: %v", err)
+	}
+
 	if *reconcileFlag {
-		report, err := service.NewReconciliationService(store.NewCounterStore(db)).Reconcile(context.Background(), 100)
+		operatorContext := database.WithAccess(context.Background(), database.Access{Admin: true, PrincipalID: "operator-reconcile"})
+		report, err := service.NewReconciliationService(store.NewCounterStore(db)).Reconcile(operatorContext, 100)
 		if err != nil {
 			log.Fatalf("Reconciliation failed: %v", err)
 		}
@@ -128,10 +137,6 @@ func main() {
 		return
 	}
 
-	schemaVersion, err := migrations.VerifySchemaCompatibility(context.Background(), db)
-	if err != nil {
-		log.Fatalf("Database schema is not compatible: %v", err)
-	}
 	health := observability.NewHealthState(migrations.LatestVersion)
 	metrics := observability.NewMetrics()
 

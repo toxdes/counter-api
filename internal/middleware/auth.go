@@ -20,6 +20,8 @@ const (
 	ScopeCounterIncrement = "counter:increment"
 	ScopeCounterAdjust    = "counter:adjust"
 	ScopeCounterHistory   = "counter:history"
+	ScopeMetadataRead     = "metadata:read"
+	ScopeMetadataWrite    = "metadata:write"
 )
 
 var (
@@ -53,7 +55,7 @@ type principalContextKey struct{}
 // CredentialLookup is the read-only persistence boundary needed by request
 // authentication. Authentication never stores or returns the raw secret.
 type CredentialLookup interface {
-	GetActiveCredential(context.Context, string) (*models.APICredential, error)
+	LookupCredential(context.Context, string) (*models.APICredential, error)
 }
 
 // APIKeyAuthenticator supports the legacy environment key and generated,
@@ -92,7 +94,7 @@ func (a *APIKeyAuthenticator) Authenticate(ctx context.Context, apiKey string) (
 	if err != nil || a.lookup == nil {
 		return Principal{}, ErrInvalidCredentials
 	}
-	credential, err := a.lookup.GetActiveCredential(ctx, credentialID)
+	credential, err := a.lookup.LookupCredential(ctx, credentialID)
 	if err != nil {
 		return Principal{}, ErrCredentialUnavailable
 	}

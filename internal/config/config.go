@@ -114,8 +114,8 @@ func Load() (*Config, error) {
 		CounterReadCacheTTLSeconds: getEnvInt("COUNTER_READ_CACHE_TTL_SECONDS", 300),
 
 		CORSAllowedOrigins:   getEnv("CORS_ALLOWED_ORIGINS", "*"),
-		CORSAllowedMethods:   getEnv("CORS_ALLOWED_METHODS", "GET,POST,OPTIONS"),
-		CORSAllowedHeaders:   getEnv("CORS_ALLOWED_HEADERS", "Content-Type,Authorization,X-Request-ID,X-API-Key,Idempotency-Key"),
+		CORSAllowedMethods:   getEnv("CORS_ALLOWED_METHODS", "GET,POST,PUT,DELETE,OPTIONS"),
+		CORSAllowedHeaders:   getEnv("CORS_ALLOWED_HEADERS", "Content-Type,Authorization,X-Request-ID,X-API-Key,Idempotency-Key,If-Match,If-None-Match"),
 		CORSAllowCredentials: getEnvBool("CORS_ALLOW_CREDENTIALS", false),
 		CORSMaxAge:           getEnvInt("CORS_MAX_AGE", 3600),
 

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"counter/internal/database"
 	"counter/internal/models"
 	"database/sql"
 	"errors"
@@ -27,7 +28,7 @@ func (s *CounterStore) ListOperations(ctx context.Context, tenantID, counterID s
 	var rows []operationRow
 	var err error
 	if cursor == nil {
-		err = s.db.SelectContext(ctx, &rows, `
+		err = database.ExecutorFor(ctx, s.db).SelectContext(ctx, &rows, `
 			SELECT operation_id, counter_id, kind, delta, value_before, value_after,
 				actor_id, metadata, created_at, completed_at
 			FROM counter_operations
@@ -36,7 +37,7 @@ func (s *CounterStore) ListOperations(ctx context.Context, tenantID, counterID s
 			LIMIT $3
 		`, tenantID, counterID, limit+1)
 	} else {
-		err = s.db.SelectContext(ctx, &rows, `
+		err = database.ExecutorFor(ctx, s.db).SelectContext(ctx, &rows, `
 			SELECT operation_id, counter_id, kind, delta, value_before, value_after,
 				actor_id, metadata, created_at, completed_at
 			FROM counter_operations
@@ -129,7 +130,7 @@ func (s *CounterStore) reconciliationBatch(ctx context.Context, lastTenantID, la
 	var rows []reconciliationRow
 	var err error
 	if lastTenantID == "" {
-		err = s.db.SelectContext(ctx, &rows, `
+		err = database.ExecutorFor(ctx, s.db).SelectContext(ctx, &rows, `
 			SELECT c.tenant_id, c.id AS counter_id, c.value AS current_value,
 				COALESCE(SUM(o.delta), 0)::text AS total_delta,
 				COUNT(o.operation_id) AS operation_count,
@@ -144,7 +145,7 @@ func (s *CounterStore) reconciliationBatch(ctx context.Context, lastTenantID, la
 			LIMIT $1
 		`, batchSize)
 	} else {
-		err = s.db.SelectContext(ctx, &rows, `
+		err = database.ExecutorFor(ctx, s.db).SelectContext(ctx, &rows, `
 			SELECT c.tenant_id, c.id AS counter_id, c.value AS current_value,
 				COALESCE(SUM(o.delta), 0)::text AS total_delta,
 				COUNT(o.operation_id) AS operation_count,

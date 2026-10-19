@@ -12,7 +12,7 @@ type fakeCredentialRepository struct {
 	requested  string
 }
 
-func (f *fakeCredentialRepository) GetActiveCredential(_ context.Context, credentialID string) (*models.APICredential, error) {
+func (f *fakeCredentialRepository) LookupCredential(_ context.Context, credentialID string) (*models.APICredential, error) {
 	f.requested = credentialID
 	return f.credential, nil
 }
