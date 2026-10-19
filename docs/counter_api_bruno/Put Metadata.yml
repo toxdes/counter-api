@@ -1,0 +1,43 @@
+info:
+  name: Put Metadata
+  type: http
+  seq: 11
+
+http:
+  method: PUT
+  url: "{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/metadata"
+  headers:
+    - name: X-Api-Key
+      value: "{{API_KEY}}"
+    - name: Content-Type
+      value: application/json
+    - name: If-None-Match
+      value: "*"
+    - name: Idempotency-Key
+      value: "{{idempotency_key}}"
+  body:
+    type: json
+    data: |-
+      {"color":"blue","tags":["daily"]}
+  auth: inherit
+
+docs: |-
+  # Put Metadata
+
+  Creates or fully replaces a document. Requires `metadata:write` or an
+  administrator key. Send raw JSON: object, array, scalar, or null, up to
+  64 KiB and 64 nesting levels, subject to PostgreSQL JSONB limits.
+
+  To create, send `If-None-Match: *` for a `201` response. To replace, remove
+  that header and send `If-Match` with the exact quoted ETag from GET for `200`.
+  Both responses contain the document envelope and a new ETag. Changes do not
+  affect the counter value. Properties omitted from a replacement are removed.
+
+  Missing preconditions return `428`, malformed conditions `400`, stale ETags
+  or creation against an existing document `412`. Invalid JSON returns `400`;
+  oversized documents return `413`.
+
+  `Idempotency-Key` is optional. Reuse a UUID with the same body and conditional
+  headers to recover the original response/ETag for 24 hours. Changed headers
+  with the same key return `409`. Replay returns the original version even if
+  later edits occurred; GET before starting a new edit.

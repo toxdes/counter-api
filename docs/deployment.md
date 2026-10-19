@@ -9,19 +9,85 @@
 
 ## Environment Setup
 
+### Database roles and RLS
+
+This binary requires schema **10**. Migrations 9/10 add optional counter
+metadata, tenant/principal information on replay records, and forced row-level
+security (RLS) on tenant data, credentials, audit events, and replay storage.
+Existing counter values, credentials, permissions, and client request formats
+are preserved. New metadata permissions must be granted explicitly.
+
+The API must connect through a **non-owner runtime role** without superuser,
+`BYPASSRLS`, or membership in a protected table's owner role. Startup refuses
+unsafe roles. If the existing deployment uses the owner for API requests,
+create a new runtime user and retain the old connection for migrations. Use
+`DATABASE_URL` for runtime and `MIGRATION_DATABASE_URL` for the owner. Do not
+give the API process the owner connection in deployments where migrations run
+as a separate job; supply it only to that job.
+
+For an existing database, create the runtime role as an operator, then apply
+migrations as the existing owner. Connect to the application database and grant
+the following privileges after migrations (adjust schema/role names):
+
+```sql
+CREATE ROLE counter_runtime LOGIN NOSUPERUSER NOBYPASSRLS
+    NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '<runtime-password>';
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT USAGE ON SCHEMA public TO counter_runtime;
+GRANT SELECT ON schema_migrations TO counter_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+    tenants, counters, counter_operations, counter_metadata,
+    api_credentials, auth_audit_events, idempotency_requests
+    TO counter_runtime;
+GRANT EXECUTE ON FUNCTION counter_app_admin(), counter_tenant_visible(uuid)
+    TO counter_runtime;
+```
+
+Repeat grants for new objects introduced by future migrations. The runtime
+role needs no schema creation, table ownership, or DDL privileges.
+
+Drain/stop old binaries before applying migration 10: they do not set RLS
+context and cannot safely coexist with the new policies. Back up first; apply
+migrations through the owner, grant runtime access, deploy the new binary with
+the runtime connection, verify `/readyz` and authenticated reads/writes, then
+restore traffic. Schema compatibility requires an exact version match.
+To roll back to a schema-8 binary, stop traffic and roll down 10 then 9 with
+the owner before restarting it. Rolling down 9 permanently removes metadata;
+export it before rollback if needed. Rolling down 10 removes saved metadata
+ETags, so outstanding metadata replay requests cannot survive that rollback.
+
+Trusted server code sets tenant, principal, administrator, and pre-authentication
+lookup context with transaction-local PostgreSQL settings. Every pool checkout
+used for data access explicitly initializes all settings; commit/rollback clears
+them. Missing context denies access. Credential authentication can SELECT
+exactly one credential ID before a tenant is trusted, without granting tenant
+data or credential writes. RLS supplements HTTP authorization: cached count
+reads still rely on HTTP tenant/scope checks. A runtime SQL credential holder
+can set these custom settings; this isolates application query mistakes, not a
+compromised application or leaked database credential.
+
+RLS predicates compare each row's own tenant ID without ownership joins.
+Database-backed operations now include BEGIN, context setup, and COMMIT around
+their queries. Managed-key authentication also needs its scoped credential
+lookup. Count-cache hits using the bootstrap key remain database-free. Metadata
+uses its own primary key `(tenant_id, counter_id)`; value reads do not fetch or
+join it. Metadata replacement locks the metadata row; counter increments still
+contend on their counter row. Metadata insertion's FK check can briefly take a
+key-share lock on the referenced counter. Measure latency and pool waits under
+your workload; there is no universal percentage cost for RLS.
+
 ### Idempotency storage and upgrades
 
 Optional idempotency for creation and credential lifecycle endpoints requires
-schema migration 8. Apply migrations with the new binary before serving its
-traffic. Schema checks require an exact version match: an older binary cannot
-restart against schema 8, so coordinate upgrades and rollback with the schema
-change. This operational requirement is separate from API compatibility;
-existing clients can continue omitting the header.
+schema migration 8; this binary requires all migrations through 10, as described
+above. Existing clients can continue omitting optional idempotency headers.
 
 The `idempotency_requests` table stores only successful responses, with issued
 credential secrets removed. Records stop providing replay protection after
 24 hours. Expired records are replaced when their key is reused; schedule
-periodic deletion of other expired records to bound storage. Run this indexed,
+periodic deletion of other expired records to bound storage. Use a dedicated
+maintenance connection with `BYPASSRLS` (or an operator superuser), never the
+runtime connection or an owner subject to FORCE RLS. Run this indexed,
 bounded cleanup query from the deployment's database maintenance job, repeating
 in separate transactions until no rows are deleted:
 
@@ -52,8 +118,8 @@ counter increments when sizing connection pools and retry budgets.
 ```bash
 sudo -u postgres psql
 CREATE DATABASE counter_api;
-CREATE USER counter_user WITH PASSWORD 'secure_password';
-GRANT ALL PRIVILEGES ON DATABASE counter_api TO counter_user;
+CREATE USER counter_owner WITH PASSWORD '<migration-password>';
+ALTER DATABASE counter_api OWNER TO counter_owner;
 \q
 ```
 
@@ -68,10 +134,12 @@ SERVER_PORT=8080
 
 DB_HOST=localhost
 DB_PORT=5432
-DB_USER=counter_user
-DB_PASSWORD=secure_password
+DB_USER=counter_runtime
+DB_PASSWORD=<runtime-password>
 DB_NAME=counter_api
 DB_SSL_MODE=disable
+# The migration job uses its separate owner connection.
+MIGRATION_DATABASE_URL=postgres://counter_owner:<migration-password>@localhost:5432/counter_api?sslmode=disable
 DB_MAX_OPEN_CONNS=25
 DB_MAX_IDLE_CONNS=5
 DB_MAX_IDLE_TIME_SECONDS=300
@@ -97,8 +165,8 @@ RATE_LIMIT_WINDOW=60
 RATE_LIMIT_CLEANUP=300
 
 CORS_ALLOWED_ORIGINS=https://yourdomain.com
-CORS_ALLOWED_METHODS=GET,POST,OPTIONS
-CORS_ALLOWED_HEADERS=Content-Type,Authorization,X-Request-ID,X-API-Key,Idempotency-Key
+CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS
+CORS_ALLOWED_HEADERS=Content-Type,Authorization,X-Request-ID,X-API-Key,Idempotency-Key,If-Match,If-None-Match
 CORS_ALLOW_CREDENTIALS=false
 CORS_MAX_AGE=3600
 
@@ -168,13 +236,17 @@ connection, and upstream timeout limits before forwarding to Go.
 make migrate-up
 ```
 
-If `DATABASE_URL` uses Neon's `-pooler` endpoint, set optional
+After migrations, create/grant the runtime role as shown above before starting
+the API. `MIGRATION_DATABASE_URL` must authenticate as the owner even when both
+connections use the same database host.
+
+If `DATABASE_URL` uses Neon's `-pooler` endpoint, set
 `MIGRATION_DATABASE_URL` to the matching direct Neon connection URL (same
 database and branch, without `-pooler`). The migration runner takes a
 session-level PostgreSQL advisory lock, so it must connect directly. Runtime
-traffic continues using `DATABASE_URL`. Leave `MIGRATION_DATABASE_URL` unset
-for deployments where `DATABASE_URL` is already a direct connection or where
-the provider supports the runner's session lock semantics.
+traffic continues using the restricted `DATABASE_URL`. Use the separate owner
+URL for migrations with other providers as well; a direct runtime connection
+still must not own the tables.
 
 To roll back one migration, run `make migrate-down`. Each invocation rolls
 back only the highest applied migration; repeat it deliberately for additional
@@ -211,8 +283,9 @@ docker compose -f deploy/scalability/compose.yaml port api3 8080
 
 Use the loopback address and assigned port from the last command to check
 `/readyz`. The topology uses local-only credentials, binds HAProxy and each
-API replica's diagnostic port to loopback, and gives each API instance five
-PostgreSQL connections. Its named
+API replica's diagnostic port to loopback, provisions separate owner/runtime
+roles before migrations, and gives each API instance five PostgreSQL
+connections. Role setup runs on existing local volumes too. Its named
 database volume remains after `docker compose down`. Stop one API service to
 observe health-check removal, then start it again:
 
@@ -346,7 +419,7 @@ retain base backups and WAL archives with `pgBackRest` or an equivalent tool.
 Take an encrypted custom-format backup for a portable smoke test:
 
 ```bash
-pg_dump --format=custom --file=counter-api.dump "$DATABASE_URL"
+pg_dump --format=custom --file=counter-api.dump "$BACKUP_DATABASE_URL"
 ```
 
 Run the isolated restore check regularly from a backup host. It creates a
@@ -355,10 +428,17 @@ fresh database:
 
 ```bash
 RESTORE_TEST_DB=counter_api_restore_20260917 \
-RESTORE_DATABASE_URL=postgres://counter_user:password@localhost/counter_api_restore_20260917 \
+RESTORE_DATABASE_URL=postgres://counter_owner:<password>@localhost/counter_api_restore_20260917 \
+RESTORE_RUNTIME_DATABASE_URL=postgres://counter_runtime:<password>@localhost/counter_api_restore_20260917 \
 COUNTER_BIN=./counter \
 ./scripts/postgres_restore_smoke.py counter-api.dump
 ```
+
+Use a backup connection with `BYPASSRLS` (or an operator superuser) so forced
+RLS does not omit tenant data. The restore tool ignores source ownership/ACLs,
+grants read access to the existing role in `RESTORE_RUNTIME_DATABASE_URL`, and
+uses that restricted connection for reconciliation. Both URLs must target the
+same fresh database. The script supports the application's public schema.
 
 The restore is not considered successful unless reconciliation reports zero
 mismatches and zero initial-value violations. Test both backup freshness and

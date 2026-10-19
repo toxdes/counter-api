@@ -1,0 +1,27 @@
+info:
+  name: Delete Metadata
+  type: http
+  seq: 12
+
+http:
+  method: DELETE
+  url: "{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/metadata"
+  headers:
+    - name: X-Api-Key
+      value: "{{API_KEY}}"
+    - name: If-Match
+      value: '"{{metadata_version}}"'
+    - name: Idempotency-Key
+      value: "{{idempotency_key}}"
+  auth: inherit
+
+docs: |-
+  # Delete Metadata
+
+  Removes the document without changing the counter. Requires `metadata:write`
+  or an administrator key and the current quoted ETag in `If-Match`.
+  Success returns `204` with no body. Missing conditions return `428`, malformed
+  conditions `400`, and stale or absent documents `412`.
+
+  `Idempotency-Key` is optional. Keyed retries replay the original `204` for
+  24 hours. Deleting then recreating metadata generates a fresh ETag.

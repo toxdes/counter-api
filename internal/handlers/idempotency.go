@@ -16,7 +16,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-type idempotencyContextKey struct{}
+type transactionContextKey struct{}
 
 // IdempotentMutation adds optional, durable replay to non-counter mutations.
 // Authentication and route authorization must run before this wrapper.
@@ -36,12 +36,12 @@ func IdempotentMutation(db *database.DB, credentialResponse bool, next fasthttp.
 		scope := principalID(ctx) + ":" + string(ctx.Method()) + ":" + string(ctx.Path())
 		requestHash := idempotencyRequestHash(ctx)
 		requestContext := requestDatabaseContext(ctx)
-		tx, err := db.BeginTxx(requestContext, nil)
+		tx, finish, err := database.BeginWrite(requestContext, db)
 		if err != nil {
 			respondWithServiceError(ctx, err, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Idempotency storage is temporarily unavailable")
 			return
 		}
-		defer tx.Rollback()
+		defer finish(false)
 		// A transaction-scoped lock serializes the same request across replicas.
 		// Unrelated keys proceed independently; hash collisions only add waiting.
 		if _, err := tx.ExecContext(requestContext, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, scope+":"+key); err != nil {
@@ -57,8 +57,9 @@ func IdempotentMutation(db *database.DB, credentialResponse bool, next fasthttp.
 			Status      int    `db:"status_code"`
 			ContentType string `db:"content_type"`
 			Body        []byte `db:"response_body"`
+			Headers     []byte `db:"response_headers"`
 		}
-		err = tx.GetContext(requestContext, &saved, `SELECT request_hash, status_code, content_type, response_body FROM idempotency_requests WHERE scope = $1 AND request_key = $2`, scope, key)
+		err = tx.GetContext(requestContext, &saved, `SELECT request_hash, status_code, content_type, response_body, response_headers FROM idempotency_requests WHERE scope = $1 AND request_key = $2`, scope, key)
 		if err == nil {
 			if !bytes.Equal(saved.Hash, requestHash) {
 				middleware.RecordEvent(ctx, "idempotency_conflict")
@@ -68,6 +69,16 @@ func IdempotentMutation(db *database.DB, credentialResponse bool, next fasthttp.
 			ctx.SetStatusCode(saved.Status)
 			ctx.Response.Header.SetContentType(saved.ContentType)
 			ctx.SetBody(saved.Body)
+			var headers map[string]string
+			if err := json.Unmarshal(saved.Headers, &headers); err != nil {
+				respondWithError(ctx, 503, "SERVICE_UNAVAILABLE", "Invalid stored replay headers")
+				return
+			}
+			for _, name := range []string{"ETag", "Cache-Control"} {
+				if value := headers[name]; value != "" {
+					ctx.Response.Header.Set(name, value)
+				}
+			}
 			ctx.Response.Header.Set("Idempotency-Replayed", "true")
 			middleware.RecordEvent(ctx, "idempotency_replay")
 			return
@@ -77,8 +88,8 @@ func IdempotentMutation(db *database.DB, credentialResponse bool, next fasthttp.
 			return
 		}
 
-		ctx.SetUserValue(idempotencyContextKey{}, database.WithTransaction(requestContext, tx))
-		defer ctx.RemoveUserValue(idempotencyContextKey{})
+		ctx.SetUserValue(transactionContextKey{}, database.WithTransaction(requestContext, tx))
+		defer ctx.RemoveUserValue(transactionContextKey{})
 		next(ctx)
 		if ctx.Response.StatusCode() < 200 || ctx.Response.StatusCode() >= 300 {
 			return // Roll back both the mutation and reservation on any failure.
@@ -98,12 +109,21 @@ func IdempotentMutation(db *database.DB, credentialResponse bool, next fasthttp.
 				return
 			}
 		}
-		_, err = tx.ExecContext(requestContext, `INSERT INTO idempotency_requests (scope, request_key, request_hash, status_code, content_type, response_body) VALUES ($1, $2, $3, $4, $5, $6)`, scope, key, requestHash, ctx.Response.StatusCode(), string(ctx.Response.Header.ContentType()), body)
+		headers := make(map[string]string)
+		for _, name := range []string{"ETag", "Cache-Control"} {
+			if value := string(ctx.Response.Header.Peek(name)); value != "" {
+				headers[name] = value
+			}
+		}
+		headerJSON, _ := json.Marshal(headers)
+		access := database.AccessFromContext(requestContext)
+		_, err = tx.ExecContext(requestContext, `INSERT INTO idempotency_requests (scope, request_key, request_hash, status_code, content_type, response_body, tenant_id, principal_id, response_headers) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::uuid, $8, $9)`, scope, key, requestHash, ctx.Response.StatusCode(), string(ctx.Response.Header.ContentType()), body, access.TenantID, access.PrincipalID, headerJSON)
 		if err == nil {
-			err = tx.Commit()
+			err = finish(true)
 		}
 		if err != nil {
 			// Replace any response containing an uncommitted credential secret.
+			ctx.Response.Header.Del("ETag")
 			respondWithServiceError(ctx, err, fasthttp.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Idempotency storage is temporarily unavailable")
 			return
 		}
@@ -138,6 +158,16 @@ func idempotencyRequestHash(ctx *fasthttp.RequestCtx) []byte {
 	hash.Write([]byte(query))
 	hash.Write([]byte{0})
 	hash.Write(body)
+	// Preconditions affect metadata writes. Preserve all existing non-metadata
+	// hashes so previously recorded creation/credential retries remain valid.
+	if strings.HasSuffix(string(ctx.Path()), "/metadata") {
+		for _, name := range []string{"If-Match", "If-None-Match"} {
+			hash.Write([]byte{0})
+			hash.Write([]byte(name))
+			hash.Write([]byte{0})
+			hash.Write(ctx.Request.Header.Peek(name))
+		}
+	}
 	return hash.Sum(nil)
 }
 

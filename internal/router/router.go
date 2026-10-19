@@ -33,6 +33,9 @@ var routeSurface = []string{
 	"POST /v2/tenants/<tenant_id>/counters/<counter_id>/set",
 	"GET /v2/tenants/<tenant_id>/counters/<counter_id>",
 	"GET /v2/tenants/<tenant_id>/counters/<counter_id>/operations",
+	"GET /v2/tenants/<tenant_id>/counters/<counter_id>/metadata",
+	"PUT /v2/tenants/<tenant_id>/counters/<counter_id>/metadata",
+	"DELETE /v2/tenants/<tenant_id>/counters/<counter_id>/metadata",
 	"POST /v2/tenants/<tenant_id>/credentials",
 	"POST /v2/tenants/<tenant_id>/credentials/<credential_id>/rotate",
 	"POST /v2/tenants/<tenant_id>/credentials/<credential_id>/revoke",
@@ -141,18 +144,24 @@ func registerRoutes(r *routing.Router, tenantService service.TenantService, coun
 	r.Get("/readyz", toHandler(handlers.ReadinessHandler(health, db)))
 	r.Get("/metrics", middleware.RequireAdminRouting(toHandler(handlers.MetricsHandler(metrics, db, version, schemaVersion))))
 
-	r.Post("/v2/tenants", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, false, handlers.CreateTenantServiceHandler(tenantService)))))
-	r.Get("/v2/tenants/<tenant_id>", middleware.RequireScopesRouting(middleware.ScopeTenantRead)(toHandler(handlers.GetTenantServiceHandler(tenantService))))
-	r.Get("/v2/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterList)(toHandler(handlers.ListCountersServiceHandler(counterService))))
-	r.Post("/v2/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterCreate)(toHandler(handlers.IdempotentMutation(db, false, handlers.CreateCounterServiceHandler(counterService)))))
-	r.Get("/v2/tenants/<tenant_id>/counters/<counter_id>", middleware.RequireScopesRouting(middleware.ScopeCounterRead)(toHandler(handlers.GetCounterServiceHandler(counterService))))
-	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/inc", middleware.RequireScopesRouting(middleware.ScopeCounterIncrement)(toHandler(handlers.IncrementCounterServiceHandler(counterService))))
-	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/set", middleware.RequireScopesRouting(middleware.ScopeCounterAdjust)(toHandler(handlers.SetCounterServiceHandler(counterService))))
-	r.Get("/v2/tenants/<tenant_id>/counters/<counter_id>/operations", middleware.RequireScopesRouting(middleware.ScopeCounterHistory)(toHandler(handlers.OperationHistoryServiceHandler(historyService))))
-	r.Post("/v2/tenants/<tenant_id>/credentials", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, true, handlers.CreateCredentialServiceHandler(credentialService)))))
-	r.Post("/v2/tenants/<tenant_id>/credentials/<credential_id>/rotate", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, true, handlers.RotateCredentialServiceHandler(credentialService)))))
-	r.Post("/v2/tenants/<tenant_id>/credentials/<credential_id>/revoke", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, false, handlers.RevokeCredentialServiceHandler(credentialService)))))
-	r.Post("/v2/admin/credentials", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, true, handlers.CreateAdminCredentialServiceHandler(credentialService)))))
+	dataHandler := func(h fasthttp.RequestHandler) routing.Handler { return toHandler(handlers.TenantAccess(h)) }
+	metadata := handlers.MetadataHandler(service.NewMetadataService(store.NewMetadataStore(db)))
+
+	r.Post("/v2/tenants", middleware.RequireAdminRouting(dataHandler(handlers.IdempotentMutation(db, false, handlers.CreateTenantServiceHandler(tenantService)))))
+	r.Get("/v2/tenants/<tenant_id>", middleware.RequireScopesRouting(middleware.ScopeTenantRead)(dataHandler(handlers.GetTenantServiceHandler(tenantService))))
+	r.Get("/v2/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterList)(dataHandler(handlers.ListCountersServiceHandler(counterService))))
+	r.Post("/v2/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterCreate)(dataHandler(handlers.IdempotentMutation(db, false, handlers.CreateCounterServiceHandler(counterService)))))
+	r.Get("/v2/tenants/<tenant_id>/counters/<counter_id>", middleware.RequireScopesRouting(middleware.ScopeCounterRead)(dataHandler(handlers.GetCounterServiceHandler(counterService))))
+	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/inc", middleware.RequireScopesRouting(middleware.ScopeCounterIncrement)(dataHandler(handlers.IncrementCounterServiceHandler(counterService))))
+	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/set", middleware.RequireScopesRouting(middleware.ScopeCounterAdjust)(dataHandler(handlers.SetCounterServiceHandler(counterService))))
+	r.Get("/v2/tenants/<tenant_id>/counters/<counter_id>/operations", middleware.RequireScopesRouting(middleware.ScopeCounterHistory)(dataHandler(handlers.OperationHistoryServiceHandler(historyService))))
+	r.Get("/v2/tenants/<tenant_id>/counters/<counter_id>/metadata", middleware.RequireScopesRouting(middleware.ScopeMetadataRead)(dataHandler(metadata)))
+	r.Put("/v2/tenants/<tenant_id>/counters/<counter_id>/metadata", middleware.RequireScopesRouting(middleware.ScopeMetadataWrite)(dataHandler(handlers.IdempotentMutation(db, false, metadata))))
+	r.Delete("/v2/tenants/<tenant_id>/counters/<counter_id>/metadata", middleware.RequireScopesRouting(middleware.ScopeMetadataWrite)(dataHandler(handlers.IdempotentMutation(db, false, metadata))))
+	r.Post("/v2/tenants/<tenant_id>/credentials", middleware.RequireAdminRouting(dataHandler(handlers.IdempotentMutation(db, true, handlers.CreateCredentialServiceHandler(credentialService)))))
+	r.Post("/v2/tenants/<tenant_id>/credentials/<credential_id>/rotate", middleware.RequireAdminRouting(dataHandler(handlers.IdempotentMutation(db, true, handlers.RotateCredentialServiceHandler(credentialService)))))
+	r.Post("/v2/tenants/<tenant_id>/credentials/<credential_id>/revoke", middleware.RequireAdminRouting(dataHandler(handlers.IdempotentMutation(db, false, handlers.RevokeCredentialServiceHandler(credentialService)))))
+	r.Post("/v2/admin/credentials", middleware.RequireAdminRouting(dataHandler(handlers.IdempotentMutation(db, true, handlers.CreateAdminCredentialServiceHandler(credentialService)))))
 
 	r.Options("/*", func(c *routing.Context) error {
 		c.RequestCtx.SetStatusCode(fasthttp.StatusOK)

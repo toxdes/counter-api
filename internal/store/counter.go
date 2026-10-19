@@ -85,7 +85,7 @@ func (s *CounterStore) CreateCounter(ctx context.Context, counter *models.Counte
 
 func (s *CounterStore) GetCounter(ctx context.Context, tenantID, counterID string) (*models.Counter, error) {
 	var counter models.Counter
-	err := s.db.GetContext(ctx, &counter,
+	err := database.ExecutorFor(ctx, s.db).GetContext(ctx, &counter,
 		"SELECT id, tenant_id, label, value, max_delta, created_at, updated_at FROM counters WHERE id = $1 AND tenant_id = $2",
 		counterID, tenantID,
 	)
@@ -102,7 +102,7 @@ func (s *CounterStore) ListCounters(ctx context.Context, tenantID string, cursor
 	var counters []models.Counter
 	var err error
 	if cursor != nil {
-		err = s.db.SelectContext(ctx, &counters, `
+		err = database.ExecutorFor(ctx, s.db).SelectContext(ctx, &counters, `
 			SELECT id, tenant_id, label, value, max_delta, created_at, updated_at
 			FROM counters
 			WHERE tenant_id = $1 AND (created_at, id) > ($2, $3)
@@ -110,7 +110,7 @@ func (s *CounterStore) ListCounters(ctx context.Context, tenantID string, cursor
 			LIMIT $4
 		`, tenantID, cursor.CreatedAt, cursor.ID, limit+1)
 	} else {
-		err = s.db.SelectContext(ctx, &counters, `
+		err = database.ExecutorFor(ctx, s.db).SelectContext(ctx, &counters, `
 			SELECT id, tenant_id, label, value, max_delta, created_at, updated_at
 			FROM counters
 			WHERE tenant_id = $1
@@ -151,14 +151,14 @@ func (s *CounterStore) IncrementCounterWithActor(ctx context.Context, tenantID, 
 }
 
 func (s *CounterStore) incrementCounter(ctx context.Context, tenantID, counterID string, delta int64, operationID string, requestHash []byte, actorID string, now time.Time) (MutationResult, error) {
-	tx, err := s.db.BeginTxx(ctx, nil)
+	tx, finish, err := database.BeginWrite(ctx, s.db)
 	if err != nil {
 		return MutationResult{}, fmt.Errorf("begin increment counter: %w", err)
 	}
 	committed := false
 	defer func() {
 		if !committed {
-			_ = tx.Rollback()
+			_ = finish(false)
 		}
 	}()
 
@@ -194,7 +194,7 @@ func (s *CounterStore) incrementCounter(ctx context.Context, tenantID, counterID
 		if resolveErr != nil {
 			return MutationResult{}, resolveErr
 		}
-		if err := tx.Commit(); err != nil {
+		if err := finish(true); err != nil {
 			return MutationResult{}, fmt.Errorf("commit increment replay: %w", err)
 		}
 		committed = true
@@ -235,7 +235,7 @@ func (s *CounterStore) incrementCounter(ctx context.Context, tenantID, counterID
 	`, current.Value, after, now, tenantID, operationID); err != nil {
 		return MutationResult{}, fmt.Errorf("complete increment operation: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
+	if err := finish(true); err != nil {
 		return MutationResult{}, fmt.Errorf("commit increment counter: %w", err)
 	}
 	committed = true
@@ -251,14 +251,14 @@ func (s *CounterStore) SetCounterValueWithOperationWithActor(ctx context.Context
 }
 
 func (s *CounterStore) setCounterValueWithOperation(ctx context.Context, tenantID, counterID string, value int64, operationID string, requestHash []byte, actorID string, now time.Time) (MutationResult, error) {
-	tx, err := s.db.BeginTxx(ctx, nil)
+	tx, finish, err := database.BeginWrite(ctx, s.db)
 	if err != nil {
 		return MutationResult{}, fmt.Errorf("begin set counter: %w", err)
 	}
 	committed := false
 	defer func() {
 		if !committed {
-			_ = tx.Rollback()
+			_ = finish(false)
 		}
 	}()
 
@@ -293,7 +293,7 @@ func (s *CounterStore) setCounterValueWithOperation(ctx context.Context, tenantI
 		if resolveErr != nil {
 			return MutationResult{}, resolveErr
 		}
-		if err := tx.Commit(); err != nil {
+		if err := finish(true); err != nil {
 			return MutationResult{}, fmt.Errorf("commit set replay: %w", err)
 		}
 		committed = true
@@ -328,7 +328,7 @@ func (s *CounterStore) setCounterValueWithOperation(ctx context.Context, tenantI
 			return MutationResult{}, fmt.Errorf("audit set operation: %w", err)
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := finish(true); err != nil {
 		return MutationResult{}, fmt.Errorf("commit set counter: %w", err)
 	}
 	committed = true

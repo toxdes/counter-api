@@ -49,11 +49,11 @@ func responseFields(t *testing.T, response mutationResponse) map[string]interfac
 }
 
 func TestOptionalIdempotencyForEveryNewMutationRoute(t *testing.T) {
-	db := testutil.OpenPostgres(t)
+	db, runtime := testutil.OpenRestrictedPostgres(t)
 	// A single available connection catches accidental nested transactions or
 	// reads outside the outer transaction while it holds the only connection.
-	db.SetMaxOpenConns(1)
-	replicas := []*Router{idempotencyReplica(db), idempotencyReplica(db)}
+	runtime.SetMaxOpenConns(1)
+	replicas := []*Router{idempotencyReplica(runtime), idempotencyReplica(runtime)}
 	tenantID := createTestTenant(t, db, "idempotency-routes")
 	credentialPath := "/v2/tenants/" + tenantID + "/credentials"
 	source := callMutation(replicas[0], credentialPath, "", `{}`, "test-key")
@@ -290,7 +290,7 @@ func TestIdempotencyAuthorizationScopeAndOptionalKeys(t *testing.T) {
 		if ctx.Response.StatusCode() != 200 {
 			t.Fatalf("read %s unexpectedly rejected header: %d", path, ctx.Response.StatusCode())
 		}
-		if string(ctx.Response.Header.Peek("Access-Control-Expose-Headers")) != "Idempotency-Replayed" {
+		if !strings.Contains(string(ctx.Response.Header.Peek("Access-Control-Expose-Headers")), "Idempotency-Replayed") {
 			t.Fatal("browser clients cannot inspect replay header")
 		}
 	}

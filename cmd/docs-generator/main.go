@@ -258,7 +258,7 @@ func endpointReferenceFor(req BrunoRequest) endpointReference {
 		},
 		"Create Credential": {
 			requestHeaders: []apiDocRow{{"X-API-Key", "{{ADMIN_API_KEY}}", "Administrator key required to manage credentials."}, {"Content-Type", "application/json", "Request body is JSON."}},
-			requestBody:    []apiDocRow{{"scopes", `["counter:read", "counter:increment", "counter:history"]`, "Optional; supports `tenant:read`, `counter:read`, `counter:list`, `counter:create`, `counter:increment`, `counter:adjust`, and `counter:history`. Defaults to read, increment, and history; listing is not granted by default."}, {"expires_at", `"2026-12-31T23:59:59Z"`, "Optional expiration timestamp; omitted for a non-expiring credential."}}, responseHeaders: jsonHeader,
+			requestBody:    []apiDocRow{{"scopes", `["counter:read", "counter:increment", "counter:history"]`, "Optional; supports `tenant:read`, `counter:read`, `counter:list`, `counter:create`, `counter:increment`, `counter:adjust`, `counter:history`, `metadata:read`, and `metadata:write`. Defaults to read, increment, and history; listing is not granted by default."}, {"expires_at", `"2026-12-31T23:59:59Z"`, "Optional expiration timestamp; omitted for a non-expiring credential."}}, responseHeaders: jsonHeader,
 			curl:         `curl --silent --show-error --request POST "$BASE_URL/v2/tenants/$TENANT_ID/credentials" --header "X-API-Key: $ADMIN_API_KEY" --header "Content-Type: application/json" --data-raw '{"scopes":["counter:read","counter:increment","counter:history"]}'`,
 			responseJSON: `{"credential_id":"01912345-6789-7000-8000-000000000010","tenant_id":"01912345-6789-7000-8000-000000000001","api_key":"ck_01912345-6789-7000-8000-000000000010.example-secret","scopes":["counter:read","counter:increment","counter:history"]}`,
 		},
@@ -296,6 +296,24 @@ func endpointReferenceFor(req BrunoRequest) endpointReference {
 			curl:         `curl --silent --show-error --request GET "$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/operations?limit=50" --header "X-API-Key: $TENANT_API_KEY"`,
 			responseJSON: `{"operations":[{"operation_id":"01912345-6789-7000-8000-000000000003","counter_id":"01912345-6789-7000-8000-000000000002","kind":"increment","delta":5,"value_before":42,"value_after":47,"metadata":{},"created_at":"2026-09-25T12:01:00Z","completed_at":"2026-09-25T12:01:00Z"}],"next_cursor":null}`,
 		},
+	}
+	metadataHeaders := []apiDocRow{{"Content-Type", "application/json", "Document envelope."}, {"ETag", `"<version>"`, "Opaque version; preserve quotes for If-Match."}, {"Cache-Control", "no-store", "Metadata is never cached."}}
+	metadataSample := `{"tenant_id":"01912345-6789-7000-8000-000000000001","counter_id":"01912345-6789-7000-8000-000000000002","data":{"color":"blue"},"version":"b858fc63-a09a-4ec2-922e-4e91629122dd","created_at":"2026-10-19T10:00:00Z","updated_at":"2026-10-19T10:00:00Z"}`
+	refs["Get Metadata"] = endpointReference{
+		requestHeaders:  []apiDocRow{{tenantKey.key, tenantKey.value, "Requires metadata:read or an administrator key."}},
+		responseHeaders: metadataHeaders, responseJSON: metadataSample,
+		curl: `curl --silent --show-error --include "$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/metadata" --header "X-API-Key: $TENANT_API_KEY"`,
+	}
+	refs["Put Metadata"] = endpointReference{
+		requestHeaders:  []apiDocRow{{tenantKey.key, tenantKey.value, "Requires metadata:write or an administrator key."}, {"Content-Type", "application/json", "Raw JSON value."}, {"If-None-Match", "*", "Required to create. For replacement, send If-Match with the quoted current ETag instead."}, {"Idempotency-Key", idem, "Optional UUID. Retain the body and conditions for retries."}},
+		requestBody:     []apiDocRow{{"(raw value)", `{"color":"blue"}`, "Any JSON value, at most 64 KiB and 64 nesting levels; JSONB limits apply."}},
+		responseHeaders: metadataHeaders, responseJSON: metadataSample,
+		curl: `curl --silent --show-error --include --request PUT "$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/metadata" --header "X-API-Key: $TENANT_API_KEY" --header "Content-Type: application/json" --header 'If-None-Match: *' --header "Idempotency-Key: $IDEMPOTENCY_KEY" --data-raw '{"color":"blue"}'`,
+	}
+	refs["Delete Metadata"] = endpointReference{
+		requestHeaders:  []apiDocRow{{tenantKey.key, tenantKey.value, "Requires metadata:write or an administrator key."}, {"If-Match", `"<version>"`, "Required exact quoted ETag from GET."}, {"Idempotency-Key", idem, "Optional UUID; retry with the same conditional header."}},
+		responseHeaders: []apiDocRow{{"Cache-Control", "no-store", "204 response has no body."}},
+		curl:            `curl --silent --show-error --include --request DELETE "$BASE_URL/v2/tenants/$TENANT_ID/counters/$COUNTER_ID/metadata" --header "X-API-Key: $TENANT_API_KEY" --header "If-Match: $METADATA_ETAG" --header "Idempotency-Key: $IDEMPOTENCY_KEY"`,
 	}
 	return refs[displayName(req)]
 }
@@ -368,7 +386,7 @@ func homepageSupplementalDocs(req BrunoRequest) string {
 }
 
 func homepageRequests(all []BrunoRequest) []BrunoRequest {
-	wanted := []string{"Create Tenant", "Get Tenant", "Create Credential", "Create Counter", "List Counters", "Get Counter", "Increment Counter", "Set Counter", "V2 Operation History"}
+	wanted := []string{"Create Tenant", "Get Tenant", "Create Credential", "Create Counter", "List Counters", "Get Counter", "Increment Counter", "Set Counter", "V2 Operation History", "Get Metadata", "Put Metadata", "Delete Metadata"}
 	byName := make(map[string]BrunoRequest, len(all))
 	for _, req := range all {
 		byName[req.Info.Name] = req
@@ -378,7 +396,7 @@ func homepageRequests(all []BrunoRequest) []BrunoRequest {
 		req.Info.Name = "Create Credential"
 		req.HTTP.Method = "POST"
 		req.HTTP.URL = "{{BASE_URL}}/v2/tenants/{tenant_id}/credentials"
-		req.Docs = "Creates a tenant-scoped key. Requires the administrator API key. The secret is returned once; store it securely. Supported scopes: `tenant:read`, `counter:read`, `counter:list`, `counter:create`, `counter:increment`, `counter:adjust`, and `counter:history`. By default, keys receive read, increment, and history scopes; listing, counter creation, and adjustment must be granted explicitly."
+		req.Docs = "Creates a tenant-scoped key. Requires the administrator API key. The secret is returned once; store it securely. Supported scopes: `tenant:read`, `counter:read`, `counter:list`, `counter:create`, `counter:increment`, `counter:adjust`, `counter:history`, `metadata:read`, and `metadata:write`. By default, keys receive read, increment, and history scopes; listing, counter creation, adjustment, and metadata access must be granted explicitly."
 		byName[req.Info.Name] = req
 	}
 	selected := make([]BrunoRequest, 0, len(wanted))

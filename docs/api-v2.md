@@ -24,7 +24,7 @@ not API-version availability. Tenant-scoped keys use the format
 `ck_{credential_id}.{secret}` and are returned only once when created.
 
 Tenant-scoped credentials are authorized by both their tenant and their action
-scopes. Supported scopes are `tenant:read`, `counter:read`, `counter:list`,
+scopes. Supported scopes are `metadata:read`, `metadata:write`, `tenant:read`, `counter:read`, `counter:list`,
 `counter:create`, `counter:increment`, `counter:adjust`, and
 `counter:history`. `counter:read` permits reading one counter by ID;
 `counter:list` separately permits enumerating a tenant's counters and is not
@@ -230,6 +230,102 @@ The operation-history response excludes request hashes and other internal
 fields. The operator command `--reconcile` verifies that completed operation
 deltas equal each stored counter value and that each counter has exactly one
 `initial_value` operation.
+
+## Counter metadata
+
+Each counter has at most one independent, optional JSON document. Metadata is
+stored separately, owned by the same tenant, and deleted automatically when its
+counter is deleted. It is not included in counter GET/list responses, cached
+counts, or increment/set operation history. The `metadata` field already present
+on operation history describes that operation; it is unrelated to this document.
+
+GET requires `metadata:read`; PUT/DELETE require `metadata:write`.
+Administrator keys are also accepted. Neither scope is included in default
+tenant credentials, and existing credentials keep their current grants. A
+writer receives the document it writes without gaining permission to GET it.
+
+### Read
+
+```http
+GET /v2/tenants/{tenant_id}/counters/{counter_id}/metadata
+X-API-Key: tenant-key-with-metadata-read
+```
+
+```http
+HTTP/1.1 200 OK
+ETag: "b858fc63-a09a-4ec2-922e-4e91629122dd"
+Cache-Control: no-store
+Content-Type: application/json
+```
+
+```json
+{
+  "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+  "counter_id": "41537842-e463-45af-9ac9-8e4639aa85d2",
+  "data": {"color": "blue", "tags": ["daily"]},
+  "version": "b858fc63-a09a-4ec2-922e-4e91629122dd",
+  "created_at": "2026-10-19T10:00:00Z",
+  "updated_at": "2026-10-19T10:00:00Z"
+}
+```
+
+No document returns `404 METADATA_NOT_FOUND`; a nonexistent counter returns
+`404 COUNTER_NOT_FOUND`. JSON `null` is a valid, present document with
+`"data": null`. ETags are opaque, case-sensitive tokens; send the quoted value
+exactly as received. GET always returns a full representation and does not
+implement conditional `304` responses.
+
+### Create or replace
+
+```http
+PUT /v2/tenants/{tenant_id}/counters/{counter_id}/metadata
+X-API-Key: tenant-key-with-metadata-write
+Content-Type: application/json
+If-None-Match: *
+Idempotency-Key: 55bed27f-c8ba-4f93-a013-1b97816fbbef
+
+{"color":"blue","tags":["daily"]}
+```
+
+Send the raw JSON value, not the response envelope. Objects, arrays, strings,
+numbers, booleans, and `null` are accepted. Maximum JSON size is 65,536 bytes
+including whitespace, with nesting at most 64 object/array levels. PostgreSQL
+JSONB normalizes object ordering/whitespace and duplicate properties; it rejects
+values it cannot represent (for example `\u0000` and numbers outside its numeric
+range). Large integers are retained without float64 conversion. The server's
+configured request body limit may impose a lower cap.
+
+Creation requires `If-None-Match: *` and returns `201` with the envelope and ETag.
+Replacement requires `If-Match: "<current-version>"` and returns `200` with a new
+ETag, even for identical data. Omitted properties are removed: this is full
+replacement. Do not send both conditional headers.
+
+### Delete
+
+```http
+DELETE /v2/tenants/{tenant_id}/counters/{counter_id}/metadata
+X-API-Key: tenant-key-with-metadata-write
+If-Match: "b858fc63-a09a-4ec2-922e-4e91629122dd"
+Idempotency-Key: 7eb5ef15-1f20-4da5-a690-352b1b0283e3
+```
+
+Returns `204` with no body and leaves the counter value unchanged. A recreated
+document gets a fresh version so an old ETag cannot modify it.
+
+For writes, absent conditions return `428 PRECONDITION_REQUIRED`; malformed
+conditions (including weak/list/wildcard If-Match) return
+`400 INVALID_PRECONDITION`. A stale ETag, create against an existing document,
+or replace/delete against an absent document returns `412 PRECONDITION_FAILED`.
+Invalid JSON/JSONB or excessive nesting returns `400 INVALID_METADATA`;
+oversized JSON returns `413 METADATA_TOO_LARGE` within the API handler.
+
+`Idempotency-Key` is optional for PUT/DELETE. The shared 24-hour replay contract
+applies, including reauthorization on every retry. Retrying the same key, body,
+and conditional headers returns the original status/body/ETag even after a
+later edit; that ETag can therefore be stale. Changed conditional headers with
+the same key return `409 IDEMPOTENCY_KEY_REUSED`. Failed preconditions do not
+reserve keys. GET current metadata before starting a new edit.
+Metadata responses use `Cache-Control: no-store`.
 
 ## Tenant Credentials
 

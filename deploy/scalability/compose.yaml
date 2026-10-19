@@ -6,7 +6,7 @@ x-api: &api
   environment: &api-environment
     SERVER_HOST: 0.0.0.0
     SERVER_PORT: 8080
-    DATABASE_URL: postgres://counter:local-only-counter@postgres:5432/counter?sslmode=disable
+    DATABASE_URL: postgres://counter_runtime:local-only-runtime@postgres:5432/counter?sslmode=disable
     DB_MAX_OPEN_CONNS: 5
     DB_MAX_IDLE_CONNS: 1
     API_KEY: local-scalability-test-key
@@ -38,14 +38,28 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
-  migrate:
-    build:
-      context: ../..
-    environment: *api-environment
-    command: ["--db-migrate=up"]
+  roles:
+    image: postgres:17-alpine
+    environment:
+      PGPASSWORD: local-only-counter
+    command: ["psql", "--set", "ON_ERROR_STOP=1", "--host", "postgres", "--username", "counter", "--dbname", "counter", "--file", "/setup-roles.sql"]
+    volumes:
+      - ./setup-roles.sql:/setup-roles.sql:ro
     depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
+
+  migrate:
+    build:
+      context: ../..
+    environment:
+      <<: *api-environment
+      DATABASE_URL: postgres://counter:local-only-counter@postgres:5432/counter?sslmode=disable
+    command: ["--db-migrate=up"]
+    depends_on:
+      roles:
+        condition: service_completed_successfully
     restart: "no"
 
   api1:

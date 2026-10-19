@@ -13,8 +13,8 @@ import (
 )
 
 func TestV2RoutesEnforceActionScopesAndTenantOwnership(t *testing.T) {
-	db := testutil.OpenPostgres(t)
-	router := idempotencyReplica(db)
+	db, runtime := testutil.OpenRestrictedPostgres(t)
+	router := idempotencyReplica(runtime)
 	tenantID := createTestTenant(t, db, "v2-authorization")
 	otherTenantID := createTestTenant(t, db, "other-v2-authorization")
 	counterID := createTestCounter(t, db, tenantID, "protected", 7)

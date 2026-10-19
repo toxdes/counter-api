@@ -3,12 +3,17 @@
 A multi-tenant counter service backed by PostgreSQL. All data APIs use V2 and
 require an API key with tenant/action authorization. Increments and value
 adjustments are durable, recorded in operation history, and require an
-idempotency key. Creation and credential lifecycle APIs support optional keys.
+idempotency key. Creation, metadata, and credential lifecycle APIs support optional keys.
+Counters can have one optional JSON metadata document with separate read/write
+permissions. PostgreSQL row-level security isolates tenant-owned rows.
 
 ## Start locally
 
 1. Install Go and PostgreSQL.
-2. Copy `.env.example` to `.env` and set `DATABASE_URL` and `API_KEY`.
+2. Follow the [database role setup](docs/deployment.md#database-roles-and-rls)
+   to create separate migration-owner and restricted runtime users. Copy
+   `.env.example` to `.env`; set `DATABASE_URL` to the runtime connection,
+   `MIGRATION_DATABASE_URL` to the owner connection, and set `API_KEY`.
 3. Run `make build`, `./counter --db-migrate=up`, then `./counter`.
 
 ## References
@@ -37,3 +42,8 @@ TTL are controlled by `COUNTER_READ_CACHE_MAX_ENTRIES` and
 
 Run `make test` for tests and `make build` to build the binary and refresh the
 embedded HTML API documentation.
+
+PostgreSQL integration tests use isolated schemas and temporary restricted LOGIN
+roles. Set `TEST_DATABASE_URL` to a disposable local superuser connection, then
+run `make test-integration`. The test connection provisions fixtures only;
+RLS coverage sends API requests through the restricted role.
