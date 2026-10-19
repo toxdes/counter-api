@@ -170,7 +170,7 @@ def create_targets(client: APIClient, tenants: int, counters_per_tenant: int, ru
     tenant_ids: list[str] = []
     targets: list[CounterTarget] = []
     for tenant_index in range(tenants):
-        status, body, _ = client.request("POST", "/tenants", {"label": f"load-{run_id}-{tenant_index}"})
+        status, body, _ = client.request("POST", "/v2/tenants", {"label": f"load-{run_id}-{tenant_index}"})
         tenant_id = str(decode_json(status, body, "create tenant").get("tenant_id", ""))
         if not tenant_id:
             raise RuntimeError("create tenant response did not include tenant_id")
@@ -181,7 +181,7 @@ def create_targets(client: APIClient, tenants: int, counters_per_tenant: int, ru
                 "initial_value": 0,
                 "max_delta": 1,
             }
-            path = f"/tenants/{quote(tenant_id, safe='')}/counters"
+            path = f"/v2/tenants/{quote(tenant_id, safe='')}/counters"
             status, body, _ = client.request("POST", path, counter_body)
             counter_id = str(decode_json(status, body, "create counter").get("counter_id", ""))
             if not counter_id:
@@ -219,7 +219,7 @@ def execute_work_item(client: APIClient, item: WorkItem, targets: list[CounterTa
     tenant = quote(target.tenant_id, safe="")
     counter = quote(target.counter_id, safe="")
     if item.kind == "read":
-        path = f"/tenants/{tenant}/counters/{counter}"
+        path = f"/v2/tenants/{tenant}/counters/{counter}"
         status, body, elapsed = client.request("GET", path)
         return [RequestSample(None, target.counter_id, "read", status, elapsed, error=None if 200 <= status < 300 else body.decode("utf-8", "replace")[:500])]
 
@@ -244,9 +244,21 @@ def execute_work_item(client: APIClient, item: WorkItem, targets: list[CounterTa
 
 
 def fetch_current_value(client: APIClient, target: CounterTarget) -> int:
-    path = f"/tenants/{quote(target.tenant_id, safe='')}/counters/{quote(target.counter_id, safe='')}"
-    status, body, _ = client.request("GET", path)
-    return int(decode_json(status, body, "read counter value")["value"])
+    """Verify materialized state through uncached listing, not a cached GET."""
+    path = f"/v2/tenants/{quote(target.tenant_id, safe='')}/counters"
+    cursor: str | None = None
+    while True:
+        query = {"limit": "100"}
+        if cursor:
+            query["cursor"] = cursor
+        status, body, _ = client.request("GET", f"{path}?{urlencode(query)}")
+        response = decode_json(status, body, "read counter value")
+        for counter in response["counters"]:
+            if counter["counter_id"] == target.counter_id:
+                return int(counter["value"])
+        cursor = response.get("next_cursor")
+        if not cursor:
+            raise RuntimeError(f"counter {target.counter_id} was missing from its tenant listing")
 
 
 def fetch_operations(client: APIClient, target: CounterTarget) -> list[dict[str, Any]]:

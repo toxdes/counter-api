@@ -1,49 +1,48 @@
 # Counter API Documentation
 
-## Quick Start
+All tenant, counter, and credential APIs use `/v2` and require an `X-API-Key`.
+Unversioned V1 data routes are retired and return `404` without redirects.
+See [the V2 reference](api-v2.md) for request/response examples and the
+[V1 migration map](api-v2.md#migrating-from-v1) for old-to-new URLs.
 
-### Base URL
+## Authorization
 
-```
-http://localhost:8080
-```
+Tenant credentials must match the tenant in the URL and have the action's
+scope. Administrator keys may access all tenants. Missing/invalid credentials
+return `401`; insufficient scopes or another tenant's credential return `403`.
 
-### Authentication
+| Operation | Route | Required tenant scope |
+|---|---|---|
+| Create tenant | `POST /v2/tenants` | Administrator only |
+| Read tenant | `GET /v2/tenants/{tenant_id}` | `tenant:read` |
+| Create counter | `POST /v2/tenants/{tenant_id}/counters` | `counter:create` |
+| List counters | `GET /v2/tenants/{tenant_id}/counters` | `counter:list` |
+| Read counter | `GET /v2/tenants/{tenant_id}/counters/{counter_id}` | `counter:read` |
+| Increment | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/inc` | `counter:increment` |
+| Set value | `POST /v2/tenants/{tenant_id}/counters/{counter_id}/set` | `counter:adjust` |
+| Read history | `GET /v2/tenants/{tenant_id}/counters/{counter_id}/operations` | `counter:history` |
+| Create tenant credential | `POST /v2/tenants/{tenant_id}/credentials` | Administrator only |
+| Rotate credential | `POST /v2/tenants/{tenant_id}/credentials/{credential_id}/rotate` | Administrator only |
+| Revoke credential | `POST /v2/tenants/{tenant_id}/credentials/{credential_id}/revoke` | Administrator only |
+| Create admin credential | `POST /v2/admin/credentials` | Administrator only |
 
-Protected endpoints require an API key in the `X-API-Key` header. For new
-clients, prefer tenant-scoped credentials and the V2 contract:
+The environment administrator key is accepted when `LEGACY_API_KEY_ENABLED`
+is enabled. It is independent of the retired API version. Default tenant
+credential scopes are `counter:read`, `counter:increment`, and
+`counter:history`; grant other scopes explicitly.
 
-```
-X-API-Key: your-secret-api-key-here
-```
-
-Some legacy V1 endpoints retain their existing public policy; see each endpoint
-below. V2 endpoints require a credential with the documented tenant scope.
-
-## API Versioning and Compatibility
-
-The existing unversioned routes are V1 and remain supported for backward
-compatibility. V1 accepts an optional `Idempotency-Key`; clients that provide a
-valid UUID receive idempotency protection. Requests without a key remain
-supported, but transport retries cannot be proven to represent the same logical
-mutation.
-
-Contract changes that require stricter behavior are introduced under `/v2`.
-See [the V2 API reference](api-v2.md).
-
-### Idempotency coverage
+## Idempotency coverage
 
 Generate a UUID for each logical write and reuse it for retries. Support is
 optional on tenant creation, counter creation, and all credential lifecycle
-routes, including those under `/v2`. Omitting the header preserves existing
-behavior. Only V2 counter increment/set require the header.
+routes. Omitting the header preserves existing behavior. Counter increment/set
+require the header.
 
 | Routes | `Idempotency-Key` behavior |
 |---|---|
-| `POST /tenants` | Optional; replay the original tenant response. |
-| `POST /tenants/{tenant_id}/counters` | Optional; replay the original counter response. |
-| V1 counter `/inc` and `/set` | Optional; use existing durable operation-history replay. |
-| V2 counter `/inc` and `/set` | Required; use existing durable operation-history replay. |
+| `POST /v2/tenants` | Optional; replay the original tenant response. |
+| `POST /v2/tenants/{tenant_id}/counters` | Optional; replay the original counter response. |
+| Counter `/inc` and `/set` | Required; use existing durable operation-history replay. |
 | `POST /v2/tenants/{tenant_id}/credentials` | Optional; replay credential fields with `api_key` omitted. |
 | `POST /v2/admin/credentials` | Optional; replay credential fields with `api_key` omitted. |
 | `POST /v2/tenants/{tenant_id}/credentials/{credential_id}/rotate` | Optional; replay replacement credential fields with `api_key` omitted. |
@@ -82,15 +81,7 @@ Counter increment/set keep their existing tenant-wide key scope, `replayed`
 response field, and operation-history retention. They do not use the new
 24-hour replay table or `Idempotency-Replayed` header.
 
-### Making Requests
-
-All requests should use `Content-Type: application/json` for request bodies.
-The server returns an `X-Request-ID` response header. If a caller supplies a
-bounded `X-Request-ID`, it is propagated; otherwise the server generates one.
-
-## Endpoints
-
-### Operations and Health
+## Operations and Health
 
 `GET /livez` checks only whether the process is alive and does not require
 PostgreSQL. `GET /readyz` returns `200` only after startup has completed, the
@@ -104,365 +95,13 @@ waits, Go goroutine/heap/GC snapshots, overload/rate-limit/idempotency events,
 build version, and schema version. It must not be exposed directly to the public
 internet.
 
-### Admin Endpoints
 
-Admin endpoints require authentication via `X-API-Key` header.
+## Requests and tools
 
-#### Create Tenant
+Use `Content-Type: application/json` for JSON bodies. The server returns an
+`X-Request-ID` response header. Counter values are signed 64-bit integers;
+use a JSON implementation that preserves integer precision.
 
-Creates a new tenant.
-
-**Request**
-
-```http
-POST /tenants
-X-API-Key: your-api-key
-Content-Type: application/json
-
-{
-  "label": "blog"
-}
-```
-
-**Response**
-
-```http
-201 Created
-Content-Type: application/json
-
-{
-  "tenant_id": "01912345-6789-7000-8000-000000000001",
-  "label": "blog",
-  "created_at": "2026-04-07T12:00:00Z",
-  "updated_at": "2026-04-07T12:00:00Z"
-}
-```
-
-**Error Response**
-
-```http
-409 Conflict
-Content-Type: application/json
-
-{
-  "errors": [
-    {
-      "code": "TENANT_LABEL_EXISTS",
-      "message": "A tenant with this label already exists"
-    }
-  ]
-}
-```
-
-#### Create Counter
-
-Creates a new counter under a tenant.
-
-**Request**
-
-```http
-POST /tenants/{tenant_id}/counters
-X-API-Key: your-api-key
-Content-Type: application/json
-
-{
-  "label": "post_likes",
-  "initial_value": 0,
-  "max_delta": 100
-}
-```
-
-**Authentication:** Administrator key or a tenant-scoped key with
-`counter:create`.
-
-**Parameters**
-
-- `label` (string, optional): Counter label for identification
-- `initial_value` (integer, optional): Starting value for the counter, defaults to 0
-- `max_delta` (integer, optional): Maximum increment allowed per request, defaults to 50, must be >= 1
-
-**Response**
-
-```http
-201 Created
-Content-Type: application/json
-
-{
-  "counter_id": "01912345-6789-7000-8000-000000000002",
-  "tenant_id": "01912345-6789-7000-8000-000000000001",
-  "label": "post_likes",
-  "value": 0,
-  "max_delta": 100,
-  "created_at": "2026-04-07T12:00:00Z",
-  "updated_at": "2026-04-07T12:00:00Z"
-}
-```
-
-#### List Counters
-
-Lists all counters for a tenant with cursor-based pagination.
-
-**Request**
-
-```http
-GET /tenants/{tenant_id}/counters?limit=20&cursor={cursor}
-X-API-Key: your-api-key
-```
-
-Query parameters:
-- `limit` (optional): Number of counters per page. Defaults to `20`, max `100`.
-- `cursor` (optional): Opaque pagination token from a previous response's `next_cursor`. Leave empty for the first page.
-
-**Response**
-
-```http
-200 OK
-Content-Type: application/json
-
-{
-  "counters": [
-    {
-      "counter_id": "01912345-6789-7000-8000-000000000002",
-      "tenant_id": "01912345-6789-7000-8000-000000000001",
-      "label": "post_likes",
-      "value": 42,
-      "max_delta": 100,
-      "created_at": "2026-04-07T12:00:00Z",
-      "updated_at": "2026-04-07T12:01:00Z"
-    }
-  ],
-  "next_cursor": "eyJjcmVhdGVkX2F0Ijoi..."
-}
-```
-
-`next_cursor` is `null` when all counters have been returned.
-
-#### Set Counter Value (V1)
-
-Sets a counter to a specific value. Requires API key.
-
-**Request**
-
-```http
-POST /tenants/{tenant_id}/counters/{counter_id}/set
-X-API-Key: your-api-key
-Idempotency-Key: 01912345-6789-7000-8000-000000000004 (optional for V1)
-Content-Type: application/json
-
-{
-  "value": 100
-}
-```
-
-**Response**
-
-```http
-200 OK
-Content-Type: application/json
-
-{
-  "operation_id": "01912345-6789-7000-8000-000000000004",
-  "counter_id": "01912345-6789-7000-8000-000000000002",
-  "delta": 53,
-  "value": 100,
-  "replayed": false,
-  "updated_at": "2026-04-07T12:03:00Z"
-}
-```
-
-### Public Endpoints
-
-Public endpoints do not require authentication.
-
-#### Get Tenant
-
-Retrieves a tenant by ID.
-
-**Request**
-
-```http
-GET /tenants/{tenant_id}
-```
-
-**Response**
-
-```http
-200 OK
-Content-Type: application/json
-
-{
-  "tenant_id": "01912345-6789-7000-8000-000000000001",
-  "label": "blog",
-  "created_at": "2026-04-07T12:00:00Z",
-  "updated_at": "2026-04-07T12:00:00Z"
-}
-```
-
-#### Get Counter
-
-Retrieves a counter by ID.
-
-**Request**
-
-```http
-GET /tenants/{tenant_id}/counters/{counter_id}
-```
-
-**Response**
-
-```http
-200 OK
-Content-Type: application/json
-
-{
-  "counter_id": "01912345-6789-7000-8000-000000000002",
-  "tenant_id": "01912345-6789-7000-8000-000000000001",
-  "label": "post_likes",
-  "value": 42,
-  "max_delta": 100,
-  "created_at": "2026-04-07T12:00:00Z",
-  "updated_at": "2026-04-07T12:01:00Z"
-}
-```
-
-#### Increment Counter
-
-Increments a counter by a specified delta.
-
-**Request**
-
-```http
-POST /tenants/{tenant_id}/{counter_id}/inc?delta=5
-Idempotency-Key: 01912345-6789-7000-8000-000000000003 (optional)
-```
-
-Query parameters:
-- `delta` (optional): Positive integer to increment by. Defaults to `1`. Must not exceed the counter's `max_delta` value.
-
-**Validation**
-
-If `delta` exceeds the counter's `max_delta` value:
-
-```http
-400 Bad Request
-Content-Type: application/json
-
-{
-  "errors": [
-    {
-      "code": "DELTA_EXCEEDS_MAXIMUM",
-      "message": "Delta exceeds maximum allowed value"
-    }
-  ]
-}
-```
-
-**Response**
-
-```http
-200 OK
-Content-Type: application/json
-
-{
-  "operation_id": "01912345-6789-7000-8000-000000000003",
-  "counter_id": "01912345-6789-7000-8000-000000000002",
-  "delta": 5,
-  "value": 47,
-  "replayed": false,
-  "updated_at": "2026-04-07T12:02:00Z"
-}
-```
-
-## Error Codes
-
-| Code | Description |
-|------|-------------|
-| `TENANT_NOT_FOUND` | Tenant does not exist |
-| `TENANT_LABEL_EXISTS` | Tenant label already taken |
-| `COUNTER_NOT_FOUND` | Counter does not exist |
-| `COUNTER_LABEL_EXISTS` | Counter label already exists for this tenant |
-| `RATE_LIMIT_EXCEEDED` | Rate limit exceeded |
-| `UNAUTHORIZED` | Invalid or missing API key |
-| `INVALID_JSON` | Malformed JSON in request body |
-| `INVALID_PARAMETER` | Invalid query or path parameter |
-| `INVALID_DELTA` | Delta must be a positive integer |
-| `INVALID_UUID` | Invalid UUID format |
-| `INVALID_CURSOR` | Malformed pagination cursor |
-| `DELTA_EXCEEDS_MAXIMUM` | Increment delta exceeds the counter's max_delta value |
-| `IDEMPOTENCY_KEY_REQUIRED` | V2 mutation is missing the required idempotency key |
-| `INVALID_IDEMPOTENCY_KEY` | Idempotency key is not a valid UUID |
-| `IDEMPOTENCY_KEY_REUSED` | Idempotency key was reused with different request data |
-| `OPERATION_IN_PROGRESS` | The idempotent operation is currently being completed |
-| `COUNTER_OVERFLOW` | The resulting counter value is outside the supported range |
-
-## Rate Limiting
-
-Public endpoints are rate-limited by IP address.
-
-**Default Limits**
-- 10 requests per 60 seconds per IP (POST)
-- 30 requests per 60 seconds per IP (GET)
-
-**Rate Limit Headers**
-
-All responses include rate limit information:
-
-```
-X-RateLimit-Limit: 10
-X-RateLimit-Remaining: 7
-```
-
-When rate limited, the response includes:
-
-```
-429 Too Many Requests
-Retry-After: 30
-```
-
-## CORS
-
-The API supports CORS for browser-based requests.
-
-**Allowed Origins**
-
-Configure via `CORS_ALLOWED_ORIGINS` environment variable:
-- Exact match: `https://example.com`
-- Multiple origins: `https://app.example.com,https://admin.example.com`
-- Wildcard all: `*`
-
-**Example Browser Request**
-
-```javascript
-fetch('http://localhost:8080/tenants/{tenant_id}/{counter_id}/inc?delta=1', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-})
-  .then(response => response.json())
-  .then(data => console.log(data));
-```
-
-## Examples
-
-### Creating a Blog Post Like Counter
-
-```bash
-# 1. Create a tenant
-curl -X POST http://localhost:8080/tenants \
-  -H "X-API-Key: your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"label": "blog"}'
-
-# 2. Create a counter for post likes
-curl -X POST "http://localhost:8080/tenants/{tenant_id}" \
-  -H "X-API-Key: your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"label": "post_likes", "initial_value": 0}'
-
-# 3. Increment the counter
-curl -X POST "http://localhost:8080/tenants/{tenant_id}/{counter_id}/inc?delta=1"
-
-# 4. Get the counter value
-curl -X GET "http://localhost:8080/tenants/{tenant_id}/{counter_id}"
-```
+The [HTML reference](api.html) is generated from the Bruno collection. The
+browser-only command builder is available at `/tools/curl`. The load-testing
+client in `scripts/scalability_load.py` uses authenticated V2 routes.

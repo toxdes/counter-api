@@ -5,10 +5,12 @@ info:
 
 http:
   method: GET
-  url: "{{BASE_URL}}/tenants/{{tenant_id}}"
+  url: "{{BASE_URL}}/v2/tenants/{{tenant_id}}"
   headers:
     - name: Content-Type
       value: application/json
+    - name: X-Api-Key
+      value: "{{API_KEY}}"
   auth: inherit
 
 runtime:
@@ -27,7 +29,7 @@ docs: |-
 
   Retrieves tenant information by tenant ID.
 
-  **Authentication:** None required (public endpoint)
+  **Authentication:** Requires an administrator key or a tenant key with `tenant:read`.
 
   **Rate Limit:** 30 requests per minute (configurable via RATE_LIMIT_GET_MULTIPLIER)
 

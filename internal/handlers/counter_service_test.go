@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"counter/internal/contract"
 	"counter/internal/models"
 	"counter/internal/service"
 	"encoding/json"
@@ -138,7 +137,7 @@ func TestListCountersServiceHandlerUsesTypedCursor(t *testing.T) {
 
 	ctx := &fasthttp.RequestCtx{}
 	ctx.SetUserValue("tenant_id", tenantID)
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters?limit=7&cursor=" + encodePageCursor(pageCursor{CreatedAt: createdAt.Format(time.RFC3339Nano), ID: "cursor-id"}))
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters?limit=7&cursor=" + encodePageCursor(pageCursor{CreatedAt: createdAt.Format(time.RFC3339Nano), ID: "cursor-id"}))
 	handler(ctx)
 
 	if ctx.Response.StatusCode() != fasthttp.StatusOK {
@@ -158,7 +157,8 @@ func TestIncrementCounterServiceHandlerUsesCounterService(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 	ctx.SetUserValue("tenant_id", tenantID)
 	ctx.SetUserValue("counter_id", counterID)
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=5")
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=5")
+	ctx.Request.Header.Set("Idempotency-Key", "01912345-6789-7000-8000-000000000003")
 	handler(ctx)
 
 	if ctx.Response.StatusCode() != fasthttp.StatusOK {
@@ -173,7 +173,7 @@ func TestIncrementCounterV2RequiresIdempotencyKey(t *testing.T) {
 	const tenantID = "123e4567-e89b-12d3-a456-426614174000"
 	const counterID = "123e4567-e89b-12d3-a456-426614174001"
 	fake := &fakeCounterService{}
-	handler := IncrementCounterServiceHandlerVersioned(fake, contract.V2)
+	handler := IncrementCounterServiceHandler(fake)
 
 	ctx := &fasthttp.RequestCtx{}
 	ctx.SetUserValue("tenant_id", tenantID)
@@ -194,7 +194,7 @@ func TestIncrementCounterV2PassesIdempotencyKey(t *testing.T) {
 	const counterID = "123e4567-e89b-12d3-a456-426614174001"
 	const key = "01912345-6789-7000-8000-000000000003"
 	fake := &fakeCounterService{incrementResult: &service.CounterMutationResult{CounterID: counterID, OperationID: key, Delta: 5, Value: 12}}
-	handler := IncrementCounterServiceHandlerVersioned(fake, contract.V2)
+	handler := IncrementCounterServiceHandler(fake)
 
 	ctx := &fasthttp.RequestCtx{}
 	ctx.SetUserValue("tenant_id", tenantID)
@@ -228,6 +228,7 @@ func TestSetCounterServiceHandlerUsesCounterService(t *testing.T) {
 	ctx.SetUserValue("tenant_id", tenantID)
 	ctx.SetUserValue("counter_id", counterID)
 	ctx.Request.SetBodyString(`{"value":42}`)
+	ctx.Request.Header.Set("Idempotency-Key", "01912345-6789-7000-8000-000000000004")
 	handler(ctx)
 
 	if ctx.Response.StatusCode() != fasthttp.StatusOK {

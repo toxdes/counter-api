@@ -114,8 +114,8 @@ global to the configured Redis database in Redis mode and per API process in
 memory mode; keep settings consistent across replicas. Cache misses read from
 PostgreSQL and populate the cache. Successful increments and adjustments
 invalidate the entry after the database transaction commits. Cache failures do
-not fail requests: Redis failures bypass the cache and read PostgreSQL. V1
-counter GETs continue to read PostgreSQL directly.
+not fail requests: Redis failures bypass the cache and read PostgreSQL. Tenant
+details and counter listing read PostgreSQL directly.
 
 The in-memory cache is local to each API replica, so a write through another
 replica can leave a cached read stale until its TTL expires. Redis shares entries
@@ -433,8 +433,9 @@ Use these as starting targets and revise them from production measurements:
 | RPO | 5 minutes or better with WAL/PITR |
 | RTO | 30 minutes or better for a regional database failure |
 
-Track the targets separately from public V1 availability because V1 clients
-may omit idempotency keys and cannot provide the same retry guarantees.
+All data routes require authentication. Increment/set requests require UUID
+idempotency keys; creation and credential lifecycle requests accept optional
+keys. Track mutation retry/conflict metrics alongside these targets.
 
 ## Building
 
@@ -515,14 +516,19 @@ sudo systemctl status counter
 
 ### Updating an existing systemd deployment
 
-V1 routes remain available, so replacing the binary does not require an
-immediate consumer migration to V2. New V2 routes are additive. Before an
-upgrade, check the database schema version and take a backup. This binary
-requires schema version 7; it refuses to start if the database is behind or
+V1 data routes have been removed. Update internal consumers to `/v2` URLs
+before switching the binary; there are no redirects or compatibility aliases.
+Tenant details require `tenant:read`, and increments require authentication
+with `counter:increment` plus a UUID idempotency key. Finish in-flight V1
+creation retries before changing URLs because creation replay records are
+path-scoped. See the migration map in `docs/api-v2.md`.
+
+Before an upgrade, check the database schema version and take a backup. This
+binary requires schema version 8; it refuses to start if the database is behind or
 ahead. Check the deployed schema before upgrading. If needed, run the new
 binary's `--db-migrate=up` with the same `DATABASE_URL` and `API_KEY` as the
 service before starting it; for a local `.env`, run it from the service's
-working directory. The read-cache change itself adds no database migration.
+working directory. V1 retirement itself adds no database migration.
 
 For a single VPS, build the binary for the server architecture, upload it to a
 temporary path, stop the service, replace the executable, then start and check

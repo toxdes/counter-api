@@ -22,7 +22,7 @@ func TestOptionsPreflightRequest(t *testing.T) {
 
 	// Test that OPTIONS requests get CORS headers and return 200
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/test-id/counters/test-counter/inc")
+	ctx.Request.SetRequestURI("/v2/tenants/test-id/counters/test-counter/inc")
 	ctx.Request.Header.SetMethod("OPTIONS")
 	ctx.Request.Header.Set("Origin", "https://toxdes.com")
 	ctx.Request.Header.Set("Access-Control-Request-Method", "POST")

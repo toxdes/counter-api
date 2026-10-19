@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	// This versions the Redis cache format, independently of HTTP API versions.
 	redisReadCachePrefix   = "counter:read-cache:v1:"
 	redisReadCacheCooldown = time.Second
 )

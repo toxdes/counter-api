@@ -261,7 +261,7 @@
         const root = origin();
         const tenantLabel = byId("tenant-label").value;
         const apiKey = byId("api-key").value;
-        byId("tenant-command").textContent = curl(root + "/tenants", apiKey, { label: tenantLabel });
+        byId("tenant-command").textContent = curl(root + "/v2/tenants", apiKey, { label: tenantLabel });
 
         const tenantId = byId("credential-tenant-id").value.trim();
         const credentialBody = {};
@@ -277,20 +277,20 @@
             const value = BigInt(initialValue);
             if (!/^-?(0|[1-9][0-9]*)$/.test(initialValue) || value < -9223372036854775808n || value > 9223372036854775807n) throw new Error("invalid int64");
             const jsonBody = '{\n  "label": ' + JSON.stringify(counterBody.label) + ',\n  "initial_value": ' + initialValue + '\n}';
-            byId("counter-command").textContent = curlWithRawJSON(root + "/tenants/" + encodeURIComponent(counterTenantId) + "/counters", byId("tenant-api-key").value, jsonBody);
+            byId("counter-command").textContent = curlWithRawJSON(root + "/v2/tenants/" + encodeURIComponent(counterTenantId) + "/counters", byId("tenant-api-key").value, jsonBody);
             byId("counter-status").textContent = "";
           } catch (_) {
             byId("counter-status").textContent = "Initial value must be a whole number in the signed 64-bit range.";
             byId("counter-command").textContent = "Correct the initial value to generate this command.";
           }
         } else {
-          byId("counter-command").textContent = curl(root + "/tenants/" + encodeURIComponent(counterTenantId) + "/counters", byId("tenant-api-key").value, counterBody);
+          byId("counter-command").textContent = curl(root + "/v2/tenants/" + encodeURIComponent(counterTenantId) + "/counters", byId("tenant-api-key").value, counterBody);
           byId("counter-status").textContent = "";
         }
         byId("counter-warning").hidden = scopes.includes("counter:create");
 
         const tenantReadID = byId("tenant-read-id").value.trim();
-        byId("tenant-read-command").textContent = curlGet(root + "/tenants/" + encodeURIComponent(tenantReadID), byId("api-key").value);
+        byId("tenant-read-command").textContent = curlGet(root + "/v2/tenants/" + encodeURIComponent(tenantReadID), byId("api-key").value);
 
         const counterReadID = byId("counter-read-id").value.trim();
         byId("counter-read-command").textContent = curlGet(root + "/v2/tenants/" + encodeURIComponent(counterTenantId) + "/counters/" + encodeURIComponent(counterReadID), byId("tenant-api-key").value);

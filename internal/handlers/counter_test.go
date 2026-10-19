@@ -22,7 +22,7 @@ func TestCreateCounterHandler(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Request.SetBody([]byte(body))
 	ctx.Request.Header.SetMethod("POST")
-	ctx.Request.SetRequestURI("/tenants/" + tenantID)
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID)
 	ctx.Request.Header.SetContentType("application/json")
 
 	// Set tenant_id in context (simulating router)
@@ -55,8 +55,9 @@ func TestIncrementCounterHandler(t *testing.T) {
 	handler := IncrementCounterHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=5")
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=5")
 	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.Header.Set("Idempotency-Key", "01912345-6789-7000-8000-000000000005")
 	ctx.SetUserValue("tenant_id", tenantID)
 	ctx.SetUserValue("counter_id", counterID)
 
@@ -88,7 +89,7 @@ func TestIncrementCounterIdempotency(t *testing.T) {
 
 	call := func(delta string) models.IncrementResponse {
 		ctx := &fasthttp.RequestCtx{}
-		ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=" + delta)
+		ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=" + delta)
 		ctx.Request.Header.SetMethod("POST")
 		ctx.Request.Header.Set("Idempotency-Key", key)
 		ctx.SetUserValue("tenant_id", tenantID)
@@ -115,7 +116,7 @@ func TestIncrementCounterIdempotency(t *testing.T) {
 	}
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=6")
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=6")
 	ctx.Request.Header.SetMethod("POST")
 	ctx.Request.Header.Set("Idempotency-Key", key)
 	ctx.SetUserValue("tenant_id", tenantID)
@@ -148,8 +149,11 @@ func TestSetCounterValueHandler(t *testing.T) {
 	handler := SetCounterValueHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/set?val=100")
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID + "/set")
+	ctx.Request.SetBodyString(`{"value":100}`)
+	ctx.Request.Header.SetContentType("application/json")
 	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.Header.Set("Idempotency-Key", "01912345-6789-7000-8000-000000000005")
 	ctx.SetUserValue("tenant_id", tenantID)
 	ctx.SetUserValue("counter_id", counterID)
 
@@ -180,7 +184,7 @@ func TestGetCounterHandler(t *testing.T) {
 	handler := GetCounterHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID)
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID)
 	ctx.Request.Header.SetMethod("GET")
 	ctx.SetUserValue("tenant_id", tenantID)
 	ctx.SetUserValue("counter_id", counterID)
@@ -238,7 +242,7 @@ func TestCreateCounterWithMaxDelta(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Request.SetBody([]byte(body))
 	ctx.Request.Header.SetMethod("POST")
-	ctx.Request.SetRequestURI("/tenants/" + tenantID)
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID)
 	ctx.Request.Header.SetContentType("application/json")
 	ctx.SetUserValue("tenant_id", tenantID)
 
@@ -262,7 +266,7 @@ func TestCreateCounterWithMaxDelta(t *testing.T) {
 	ctx2 := &fasthttp.RequestCtx{}
 	ctx2.Request.SetBody([]byte(body2))
 	ctx2.Request.Header.SetMethod("POST")
-	ctx2.Request.SetRequestURI("/tenants/" + tenantID)
+	ctx2.Request.SetRequestURI("/v2/tenants/" + tenantID)
 	ctx2.Request.Header.SetContentType("application/json")
 	ctx2.SetUserValue("tenant_id", tenantID)
 
@@ -294,8 +298,9 @@ func TestIncrementCounterExceedsMaxDelta(t *testing.T) {
 
 	// Try to increment with delta=20 (exceeds max_delta=10)
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=20")
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=20")
 	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.Header.Set("Idempotency-Key", "01912345-6789-7000-8000-000000000005")
 	ctx.SetUserValue("tenant_id", tenantID)
 	ctx.SetUserValue("counter_id", counterID)
 
@@ -332,8 +337,9 @@ func TestIncrementCounterWithinMaxDelta(t *testing.T) {
 
 	// Increment with delta=5 (within max_delta=10)
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=5")
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=5")
 	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.Header.Set("Idempotency-Key", "01912345-6789-7000-8000-000000000005")
 	ctx.SetUserValue("tenant_id", tenantID)
 	ctx.SetUserValue("counter_id", counterID)
 
@@ -364,7 +370,7 @@ func TestGetCounterIncludesMaxDelta(t *testing.T) {
 	handler := GetCounterHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID)
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID)
 	ctx.Request.Header.SetMethod("GET")
 	ctx.SetUserValue("tenant_id", tenantID)
 	ctx.SetUserValue("counter_id", counterID)
@@ -398,7 +404,7 @@ func TestListCountersEmpty(t *testing.T) {
 	handler := ListCountersHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters")
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters")
 	ctx.Request.Header.SetMethod("GET")
 	ctx.SetUserValue("tenant_id", tenantID)
 
@@ -434,7 +440,7 @@ func TestListCountersBasic(t *testing.T) {
 	handler := ListCountersHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters")
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters")
 	ctx.Request.Header.SetMethod("GET")
 	ctx.SetUserValue("tenant_id", tenantID)
 
@@ -479,7 +485,7 @@ func TestListCountersPagination(t *testing.T) {
 	handler := ListCountersHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters?limit=2")
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters?limit=2")
 	ctx.Request.Header.SetMethod("GET")
 	ctx.SetUserValue("tenant_id", tenantID)
 
@@ -517,7 +523,7 @@ func TestListCountersCursorContinuation(t *testing.T) {
 
 	// First page: limit=2
 	ctx1 := &fasthttp.RequestCtx{}
-	ctx1.Request.SetRequestURI("/tenants/" + tenantID + "/counters?limit=2")
+	ctx1.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters?limit=2")
 	ctx1.Request.Header.SetMethod("GET")
 	ctx1.SetUserValue("tenant_id", tenantID)
 
@@ -538,7 +544,7 @@ func TestListCountersCursorContinuation(t *testing.T) {
 
 	// Second page: use cursor
 	ctx2 := &fasthttp.RequestCtx{}
-	ctx2.Request.SetRequestURI("/tenants/" + tenantID + "/counters?limit=2&cursor=" + *resp1.NextCursor)
+	ctx2.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters?limit=2&cursor=" + *resp1.NextCursor)
 	ctx2.Request.Header.SetMethod("GET")
 	ctx2.SetUserValue("tenant_id", tenantID)
 
@@ -595,7 +601,7 @@ func TestListCountersInvalidUUID(t *testing.T) {
 	handler := ListCountersHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/not-a-uuid/counters")
+	ctx.Request.SetRequestURI("/v2/tenants/not-a-uuid/counters")
 	ctx.Request.Header.SetMethod("GET")
 	ctx.SetUserValue("tenant_id", "not-a-uuid")
 
@@ -614,7 +620,7 @@ func TestListCountersTenantNotFound(t *testing.T) {
 	handler := ListCountersHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/00000000-0000-0000-0000-000000000000/counters")
+	ctx.Request.SetRequestURI("/v2/tenants/00000000-0000-0000-0000-000000000000/counters")
 	ctx.Request.Header.SetMethod("GET")
 	ctx.SetUserValue("tenant_id", "00000000-0000-0000-0000-000000000000")
 
@@ -638,7 +644,7 @@ func TestListCountersSinglePage(t *testing.T) {
 	handler := ListCountersHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters?limit=10")
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters?limit=10")
 	ctx.Request.Header.SetMethod("GET")
 	ctx.SetUserValue("tenant_id", tenantID)
 
@@ -687,7 +693,7 @@ func TestListCountersCursorFormat(t *testing.T) {
 	handler := ListCountersHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters?limit=1")
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters?limit=1")
 	ctx.Request.Header.SetMethod("GET")
 	ctx.SetUserValue("tenant_id", tenantID)
 

@@ -31,14 +31,17 @@ type sentryContext struct {
 func extractSentryContext(ctx *fasthttp.RequestCtx) (tenantID, counterID string) {
 	path := string(ctx.Path())
 
-	// Parse path format: /tenants/{tenant_id}/counters/{counter_id}
-	// or: /tenants/{tenant_id}
+	// Parse the supported /v2/tenants/{tenant_id}[/counters/{counter_id}] paths.
 	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) == 0 || parts[0] != "v2" {
+		return "", ""
+	}
+	parts = parts[1:]
 
 	if len(parts) >= 2 && parts[0] == "tenants" {
 		tenantID = parts[1]
 	}
-	if len(parts) >= 4 && parts[2] == "counters" {
+	if len(parts) >= 4 && parts[0] == "tenants" && parts[2] == "counters" {
 		counterID = parts[3]
 	}
 

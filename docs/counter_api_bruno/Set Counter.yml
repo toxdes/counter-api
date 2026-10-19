@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: "{{BASE_URL}}/tenants/{{tenant_id}}/counters/{{counter_id}}/set"
+  url: "{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}/set"
   headers:
     - name: Content-Type
       value: application/json
@@ -37,10 +37,10 @@ settings:
 docs: |-
   # Set Counter Value
 
-  Legacy V1 set route. New clients should use the V2 set route, which requires
-  an idempotency key and records the adjustment in operation history.
+  Sets the counter value with a required UUID `Idempotency-Key` and records
+  the adjustment in operation history.
 
-  **Authentication:** Requires API key via X-Api-Key header
+  **Authentication:** Requires an administrator key or a tenant key with `counter:adjust`.
 
   **Rate Limit:** 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)
 
@@ -56,9 +56,9 @@ docs: |-
   ```
 
   ### Fields
-  - `value` (integer, optional): The new value to set
+  - `value` (integer, required): The new value to set
     - Range: int64 min to max
-    - If omitted, counter is set to 0
+    - Omitting value or sending null is rejected
 
   ## Response (200 OK)
   ```json

@@ -1,7 +1,6 @@
 package router
 
 import (
-	"counter/internal/contract"
 	"counter/internal/database"
 	"counter/internal/handlers"
 	"counter/internal/middleware"
@@ -26,13 +25,10 @@ var routeSurface = []string{
 	"GET /livez",
 	"GET /readyz",
 	"GET /metrics",
-	"POST /tenants",
-	"GET /tenants/<tenant_id>",
-	"GET /tenants/<tenant_id>/counters",
-	"POST /tenants/<tenant_id>/counters",
-	"GET /tenants/<tenant_id>/counters/<counter_id>",
-	"POST /tenants/<tenant_id>/counters/<counter_id>/inc",
-	"POST /tenants/<tenant_id>/counters/<counter_id>/set",
+	"POST /v2/tenants",
+	"GET /v2/tenants/<tenant_id>",
+	"GET /v2/tenants/<tenant_id>/counters",
+	"POST /v2/tenants/<tenant_id>/counters",
 	"POST /v2/tenants/<tenant_id>/counters/<counter_id>/inc",
 	"POST /v2/tenants/<tenant_id>/counters/<counter_id>/set",
 	"GET /v2/tenants/<tenant_id>/counters/<counter_id>",
@@ -113,11 +109,10 @@ func NewRouterWithObservability(db *database.DB, corsConfig *middleware.CORSConf
 	tenantService := service.NewTenantService(store.NewTenantStore(db))
 	counterStore := store.NewCounterStore(db)
 	counterService := service.NewCounterServiceWithReadCache(counterStore, options.CounterReadCache)
-	v1CounterReadService := service.NewCounterService(counterStore)
 	historyService := service.NewOperationHistoryService(counterStore)
 	credentialStore := store.NewCredentialStore(db)
 	credentialService := service.NewCredentialService(credentialStore)
-	registerRoutes(r, tenantService, counterService, v1CounterReadService, historyService, credentialService, options.Health, options.Metrics, db, options.Version, options.SchemaVersion)
+	registerRoutes(r, tenantService, counterService, historyService, credentialService, options.Health, options.Metrics, db, options.Version, options.SchemaVersion)
 
 	handler := fasthttp.RequestHandler(r.HandleRequest)
 	handler = middleware.RateLimitWithMetrics(rateLimiter, options.Metrics)(handler)
@@ -139,30 +134,20 @@ func NewRouterWithObservability(db *database.DB, corsConfig *middleware.CORSConf
 	return &Router{RequestHandler: handler}
 }
 
-func registerRoutes(r *routing.Router, tenantService service.TenantService, counterService, v1CounterReadService service.CounterService, historyService service.OperationHistoryService, credentialService service.CredentialService, health *observability.HealthState, metrics *observability.Metrics, db *database.DB, version string, schemaVersion int64) {
+func registerRoutes(r *routing.Router, tenantService service.TenantService, counterService service.CounterService, historyService service.OperationHistoryService, credentialService service.CredentialService, health *observability.HealthState, metrics *observability.Metrics, db *database.DB, version string, schemaVersion int64) {
 	r.Get("/", toHandler(handlers.DocsHandler))
 	r.Get("/tools/curl", toHandler(handlers.CurlBuilderHandler))
 	r.Get("/livez", toHandler(handlers.LivenessHandler(health)))
 	r.Get("/readyz", toHandler(handlers.ReadinessHandler(health, db)))
 	r.Get("/metrics", middleware.RequireAdminRouting(toHandler(handlers.MetricsHandler(metrics, db, version, schemaVersion))))
 
-	r.Post("/tenants", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, false, handlers.CreateTenantServiceHandler(tenantService)))))
-	r.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantServiceHandler(tenantService)))
-	r.Get("/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterList)(toHandler(handlers.ListCountersServiceHandler(counterService))))
-	r.Post("/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterCreate)(toHandler(handlers.IdempotentMutation(db, false, handlers.CreateCounterServiceHandler(counterService)))))
-
-	getCounter := handlers.GetCounterServiceHandler(v1CounterReadService)
-	incrementCounter := handlers.IncrementCounterServiceHandler(counterService)
-	setCounter := handlers.SetCounterServiceHandler(counterService)
-	r.Get("/tenants/<tenant_id>/counters/<counter_id>", middleware.RequireScopesRouting(middleware.ScopeCounterRead)(toHandler(getCounter)))
-	r.Post("/tenants/<tenant_id>/counters/<counter_id>/inc", toHandler(incrementCounter))
-	r.Post("/tenants/<tenant_id>/counters/<counter_id>/set", middleware.RequireScopesRouting(middleware.ScopeCounterAdjust)(toHandler(setCounter)))
-
-	v2IncrementCounter := handlers.IncrementCounterServiceHandlerVersioned(counterService, contract.V2)
-	v2SetCounter := handlers.SetCounterServiceHandlerVersioned(counterService, contract.V2)
+	r.Post("/v2/tenants", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, false, handlers.CreateTenantServiceHandler(tenantService)))))
+	r.Get("/v2/tenants/<tenant_id>", middleware.RequireScopesRouting(middleware.ScopeTenantRead)(toHandler(handlers.GetTenantServiceHandler(tenantService))))
+	r.Get("/v2/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterList)(toHandler(handlers.ListCountersServiceHandler(counterService))))
+	r.Post("/v2/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterCreate)(toHandler(handlers.IdempotentMutation(db, false, handlers.CreateCounterServiceHandler(counterService)))))
 	r.Get("/v2/tenants/<tenant_id>/counters/<counter_id>", middleware.RequireScopesRouting(middleware.ScopeCounterRead)(toHandler(handlers.GetCounterServiceHandler(counterService))))
-	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/inc", middleware.RequireScopesRouting(middleware.ScopeCounterIncrement)(toHandler(v2IncrementCounter)))
-	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/set", middleware.RequireScopesRouting(middleware.ScopeCounterAdjust)(toHandler(v2SetCounter)))
+	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/inc", middleware.RequireScopesRouting(middleware.ScopeCounterIncrement)(toHandler(handlers.IncrementCounterServiceHandler(counterService))))
+	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/set", middleware.RequireScopesRouting(middleware.ScopeCounterAdjust)(toHandler(handlers.SetCounterServiceHandler(counterService))))
 	r.Get("/v2/tenants/<tenant_id>/counters/<counter_id>/operations", middleware.RequireScopesRouting(middleware.ScopeCounterHistory)(toHandler(handlers.OperationHistoryServiceHandler(historyService))))
 	r.Post("/v2/tenants/<tenant_id>/credentials", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, true, handlers.CreateCredentialServiceHandler(credentialService)))))
 	r.Post("/v2/tenants/<tenant_id>/credentials/<credential_id>/rotate", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, true, handlers.RotateCredentialServiceHandler(credentialService)))))

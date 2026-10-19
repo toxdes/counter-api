@@ -21,7 +21,7 @@ func TestCreateTenantHandler(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Request.SetBody([]byte(body))
 	ctx.Request.Header.SetMethod("POST")
-	ctx.Request.SetRequestURI("/tenants")
+	ctx.Request.SetRequestURI("/v2/tenants")
 	ctx.Request.Header.SetContentType("application/json")
 
 	handler(ctx)
@@ -54,7 +54,8 @@ func TestGetTenantHandler(t *testing.T) {
 	handler := GetTenantHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/" + tenantID)
+	ctx.Request.SetRequestURI("/v2/tenants/" + tenantID)
+	ctx.SetUserValue("tenant_id", tenantID)
 	ctx.Request.Header.SetMethod("GET")
 
 	handler(ctx)
@@ -81,7 +82,8 @@ func TestGetTenantNotFound(t *testing.T) {
 	handler := GetTenantHandler(db)
 
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.SetRequestURI("/tenants/00000000-0000-0000-0000-000000000000")
+	ctx.Request.SetRequestURI("/v2/tenants/00000000-0000-0000-0000-000000000000")
+	ctx.SetUserValue("tenant_id", "00000000-0000-0000-0000-000000000000")
 	ctx.Request.Header.SetMethod("GET")
 
 	handler(ctx)

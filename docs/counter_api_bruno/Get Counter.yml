@@ -5,10 +5,12 @@ info:
 
 http:
   method: GET
-  url: "{{BASE_URL}}/tenants/{{tenant_id}}/counters/{{counter_id}}"
+  url: "{{BASE_URL}}/v2/tenants/{{tenant_id}}/counters/{{counter_id}}"
   headers:
     - name: Content-Type
       value: application/json
+    - name: X-Api-Key
+      value: "{{API_KEY}}"
   auth: inherit
 
 runtime:
@@ -32,8 +34,8 @@ docs: |-
   **Authentication:** Requires a key with `counter:read` (administrator keys
   are also accepted).
 
-  This is the legacy V1 route. New clients should use the equivalent V2 route,
-  which uses the configured read-through cache.
+  Reads use the configured bounded read-through cache. See the deployment
+  guide for cache configuration and consistency behavior.
 
   ## URL Parameters
   - `tenant_id` (UUID, required): The unique identifier of the tenant

@@ -28,7 +28,7 @@ func IdempotentMutation(db *database.DB, credentialResponse bool, next fasthttp.
 			next(ctx)
 			return
 		}
-		if err := contract.ValidateIdempotencyKey(contract.V1, key); err != nil {
+		if err := contract.ValidateIdempotencyKey(key, false); err != nil {
 			respondWithError(ctx, fasthttp.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY", err.Error())
 			return
 		}

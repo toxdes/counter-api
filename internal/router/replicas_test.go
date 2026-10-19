@@ -21,7 +21,7 @@ func TestIdempotentIncrementCanRetryAcrossRouterReplicas(t *testing.T) {
 	replicas := []*Router{newReplica(), newReplica(), newReplica()}
 
 	createCtx := &fasthttp.RequestCtx{}
-	createCtx.Request.SetRequestURI("/tenants/" + tenantID + "/counters")
+	createCtx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters")
 	createCtx.Request.Header.SetMethod("POST")
 	createCtx.Request.Header.Set("X-API-Key", "test-key")
 	createCtx.Request.Header.SetContentType("application/json")
@@ -45,9 +45,10 @@ func TestIdempotentIncrementCanRetryAcrossRouterReplicas(t *testing.T) {
 
 	request := func(replica *Router) (int, string) {
 		ctx := &fasthttp.RequestCtx{}
-		ctx.Request.SetRequestURI("/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=4")
+		ctx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters/" + counterID + "/inc?delta=4")
 		ctx.Request.Header.SetMethod("POST")
 		ctx.Request.Header.Set("Idempotency-Key", operationID)
+		ctx.Request.Header.Set("X-API-Key", "test-key")
 		replica.ServeHTTP(ctx)
 		return ctx.Response.StatusCode(), string(ctx.Response.Body())
 	}
@@ -105,7 +106,7 @@ func TestConcurrentIncrementsAcrossReplicasDoNotDeadlock(t *testing.T) {
 	replicas := []*Router{newReplica(), newReplica(), newReplica()}
 
 	createCtx := &fasthttp.RequestCtx{}
-	createCtx.Request.SetRequestURI("/tenants/" + tenantID + "/counters")
+	createCtx.Request.SetRequestURI("/v2/tenants/" + tenantID + "/counters")
 	createCtx.Request.Header.SetMethod("POST")
 	createCtx.Request.Header.Set("X-API-Key", "test-key")
 	createCtx.Request.Header.SetContentType("application/json")
@@ -131,8 +132,10 @@ func TestConcurrentIncrementsAcrossReplicasDoNotDeadlock(t *testing.T) {
 			defer wg.Done()
 			<-start
 			ctx := &fasthttp.RequestCtx{}
-			ctx.Request.SetRequestURI(fmt.Sprintf("/tenants/%s/counters/%s/inc?delta=1", tenantID, created.ID))
+			ctx.Request.SetRequestURI(fmt.Sprintf("/v2/tenants/%s/counters/%s/inc?delta=1", tenantID, created.ID))
 			ctx.Request.Header.SetMethod("POST")
+			ctx.Request.Header.Set("X-API-Key", "test-key")
+			ctx.Request.Header.Set("Idempotency-Key", fmt.Sprintf("01912345-6789-7000-8000-%012d", i+100))
 			replicas[i%len(replicas)].ServeHTTP(ctx)
 			if ctx.Response.StatusCode() != fasthttp.StatusOK {
 				errors <- fmt.Sprintf("replica %d returned %d: %s", i%len(replicas), ctx.Response.StatusCode(), ctx.Response.Body())

@@ -23,7 +23,7 @@ func TestCurlBuilderHandlerServesCommandBuilder(t *testing.T) {
 	for _, want := range []string{
 		"cURL tool",
 		"Generate cURL commands for commonly used APIs. This is a local-browser-only tool that runs in your browser.",
-		"/tenants",
+		"/v2/tenants",
 		"/v2/tenants/",
 		"counter:create",
 		"counter:list",
@@ -36,7 +36,6 @@ func TestCurlBuilderHandlerServesCommandBuilder(t *testing.T) {
 		"id=\"counter-read-id\"",
 		"id=\"counter-read-warning\"",
 		"counter:read",
-		"curlGet(root + \"/tenants/\"",
 		"curlGet(root + \"/v2/tenants/\"",
 		"family=Inter:wght@400;500;600;700",
 		"family=JetBrains+Mono:wght@400;500;600;700",

@@ -116,17 +116,19 @@ make run
 ./counter --version
 # Output: Counter API v dev
 
-# In another terminal, trigger a 500 error
-curl -X POST http://localhost:8080/tenants/invalid-tenant-id/counters \
-  -H "X-API-Key: your-api-key"
+# In another terminal, verify validation (400; not captured as a Sentry error)
+curl -X POST http://localhost:8080/v2/tenants/invalid-tenant-id/counters \
+  -H "X-API-Key: $API_KEY"
 
 # Trigger rate limiting
-for i in {1..20}; do
-  curl http://localhost:8080/tenants/test
+for i in {1..40}; do
+  curl -H "X-API-Key: $API_KEY" "http://localhost:8080/v2/tenants/$TENANT_ID"
 done
 ```
 
-Check your Sentry dashboard for captured events.
+Validation and rate-limit responses are not captured as Sentry error events.
+Verify error capture using actual 5xx responses or panics in an isolated test
+deployment, then check the Sentry dashboard.
 
 ### 4. Verify Configuration
 
@@ -215,7 +217,7 @@ For high-traffic production environments:
 **Problem**: tenant_id or counter_id tags are missing
 
 **Solutions**:
-1. Ensure request path follows `/tenants/{tenant_id}/counters/{counter_id}` format
+1. Ensure request path follows `/v2/tenants/{tenant_id}/counters/{counter_id}` format
 2. Check that context extraction isn't panicking (check logs)
 3. Verify hub is not nil during request handling
 4. Test with manual curl requests to verify path format
