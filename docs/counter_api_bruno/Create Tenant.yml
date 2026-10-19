@@ -30,6 +30,12 @@ docs: |-
 
   Creates a new tenant with a unique label. Tenants act as isolated workspaces that contain counters.
 
+  **Idempotency:** Optional `Idempotency-Key` header containing a UUID. Reuse
+  the key with the same administrator credential, URL, and request to replay
+  the original tenant response for 24 hours. Replays return
+  `Idempotency-Replayed: true`; changing request data with the same key returns
+  `409 IDEMPOTENCY_KEY_REUSED`.
+
   **Authentication:** Requires API key via X-Api-Key header
 
   **Rate Limit:** 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)

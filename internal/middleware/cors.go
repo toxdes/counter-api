@@ -30,6 +30,7 @@ func CORS(config *CORSConfig) func(fasthttp.RequestHandler) fasthttp.RequestHand
 
 			ctx.Response.Header.Set("Access-Control-Allow-Methods", config.AllowedMethods)
 			ctx.Response.Header.Set("Access-Control-Allow-Headers", config.AllowedHeaders)
+			ctx.Response.Header.Set("Access-Control-Expose-Headers", "Idempotency-Replayed")
 
 			if config.AllowCredentials {
 				ctx.Response.Header.Set("Access-Control-Allow-Credentials", "true")

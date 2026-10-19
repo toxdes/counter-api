@@ -13,8 +13,8 @@ func TestOpenPostgresUsesRealMigrations(t *testing.T) {
 	if err := db.Get(&migrationCount, "SELECT COUNT(*) FROM schema_migrations"); err != nil {
 		t.Fatalf("failed to query migration history: %v", err)
 	}
-	if migrationCount != 6 {
-		t.Fatalf("expected 6 applied migrations, got %d", migrationCount)
+	if migrationCount != int(migrations.LatestVersion) {
+		t.Fatalf("expected %d applied migrations, got %d", migrations.LatestVersion, migrationCount)
 	}
 
 	var hasMaxDelta bool
@@ -104,8 +104,8 @@ func TestConcurrentMigrationRunsAreSerialized(t *testing.T) {
 	if err := db.Get(&migrationCount, "SELECT COUNT(*) FROM schema_migrations"); err != nil {
 		t.Fatalf("failed to query migration history: %v", err)
 	}
-	if migrationCount != 6 {
-		t.Fatalf("expected six applied migrations after concurrent runs, got %d", migrationCount)
+	if migrationCount != int(migrations.LatestVersion) {
+		t.Fatalf("expected %d applied migrations after concurrent runs, got %d", migrations.LatestVersion, migrationCount)
 	}
 }
 
@@ -119,7 +119,7 @@ func TestMigrationDownRollsBackOneVersion(t *testing.T) {
 	if err := db.Get(&migrationCount, "SELECT COUNT(*) FROM schema_migrations"); err != nil {
 		t.Fatalf("failed to query migration history: %v", err)
 	}
-	if migrationCount != 5 {
+	if migrationCount != int(migrations.LatestVersion-1) {
 		t.Fatalf("expected one migration to be rolled back, got %d remaining", migrationCount)
 	}
 

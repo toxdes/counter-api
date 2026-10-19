@@ -146,10 +146,10 @@ func registerRoutes(r *routing.Router, tenantService service.TenantService, coun
 	r.Get("/readyz", toHandler(handlers.ReadinessHandler(health, db)))
 	r.Get("/metrics", middleware.RequireAdminRouting(toHandler(handlers.MetricsHandler(metrics, db, version, schemaVersion))))
 
-	r.Post("/tenants", middleware.RequireAdminRouting(toHandler(handlers.CreateTenantServiceHandler(tenantService))))
+	r.Post("/tenants", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, false, handlers.CreateTenantServiceHandler(tenantService)))))
 	r.Get("/tenants/<tenant_id>", toHandler(handlers.GetTenantServiceHandler(tenantService)))
 	r.Get("/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterList)(toHandler(handlers.ListCountersServiceHandler(counterService))))
-	r.Post("/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterCreate)(toHandler(handlers.CreateCounterServiceHandler(counterService))))
+	r.Post("/tenants/<tenant_id>/counters", middleware.RequireScopesRouting(middleware.ScopeCounterCreate)(toHandler(handlers.IdempotentMutation(db, false, handlers.CreateCounterServiceHandler(counterService)))))
 
 	getCounter := handlers.GetCounterServiceHandler(v1CounterReadService)
 	incrementCounter := handlers.IncrementCounterServiceHandler(counterService)
@@ -164,10 +164,10 @@ func registerRoutes(r *routing.Router, tenantService service.TenantService, coun
 	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/inc", middleware.RequireScopesRouting(middleware.ScopeCounterIncrement)(toHandler(v2IncrementCounter)))
 	r.Post("/v2/tenants/<tenant_id>/counters/<counter_id>/set", middleware.RequireScopesRouting(middleware.ScopeCounterAdjust)(toHandler(v2SetCounter)))
 	r.Get("/v2/tenants/<tenant_id>/counters/<counter_id>/operations", middleware.RequireScopesRouting(middleware.ScopeCounterHistory)(toHandler(handlers.OperationHistoryServiceHandler(historyService))))
-	r.Post("/v2/tenants/<tenant_id>/credentials", middleware.RequireAdminRouting(toHandler(handlers.CreateCredentialServiceHandler(credentialService))))
-	r.Post("/v2/tenants/<tenant_id>/credentials/<credential_id>/rotate", middleware.RequireAdminRouting(toHandler(handlers.RotateCredentialServiceHandler(credentialService))))
-	r.Post("/v2/tenants/<tenant_id>/credentials/<credential_id>/revoke", middleware.RequireAdminRouting(toHandler(handlers.RevokeCredentialServiceHandler(credentialService))))
-	r.Post("/v2/admin/credentials", middleware.RequireAdminRouting(toHandler(handlers.CreateAdminCredentialServiceHandler(credentialService))))
+	r.Post("/v2/tenants/<tenant_id>/credentials", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, true, handlers.CreateCredentialServiceHandler(credentialService)))))
+	r.Post("/v2/tenants/<tenant_id>/credentials/<credential_id>/rotate", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, true, handlers.RotateCredentialServiceHandler(credentialService)))))
+	r.Post("/v2/tenants/<tenant_id>/credentials/<credential_id>/revoke", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, false, handlers.RevokeCredentialServiceHandler(credentialService)))))
+	r.Post("/v2/admin/credentials", middleware.RequireAdminRouting(toHandler(handlers.IdempotentMutation(db, true, handlers.CreateAdminCredentialServiceHandler(credentialService)))))
 
 	r.Options("/*", func(c *routing.Context) error {
 		c.RequestCtx.SetStatusCode(fasthttp.StatusOK)

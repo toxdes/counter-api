@@ -120,6 +120,11 @@
   &#34;updated_at&#34;: &#34;2026-09-25T08:00:00Z&#34;
 }</code></pre>
 <p>Creates a new tenant with a unique label. Tenants act as isolated workspaces that contain counters.</p>
+<p><strong>Idempotency:</strong> Optional <code>Idempotency-Key</code> header containing a UUID. Reuse</p>
+<p>the key with the same administrator credential, URL, and request to replay</p>
+<p>the original tenant response for 24 hours. Replays return</p>
+<p><code>Idempotency-Replayed: true</code>; changing request data with the same key returns</p>
+<p><code>409 IDEMPOTENCY_KEY_REUSED</code>.</p>
 <p><strong>Authentication:</strong> Requires API key via X-Api-Key header</p>
 <p><strong>Rate Limit:</strong> 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)</p>
 <h3>Errors</h3>
@@ -206,6 +211,10 @@
   &#34;updated_at&#34;: &#34;2026-09-25T08:00:00Z&#34;
 }</code></pre>
 <p>Creates a new counter under the specified tenant.</p>
+<p><strong>Idempotency:</strong> Optional <code>Idempotency-Key</code> header containing a UUID. Reuse</p>
+<p>the key with the same caller, URL, and request to replay the original counter</p>
+<p>response for 24 hours. Replays return <code>Idempotency-Replayed: true</code>; changing</p>
+<p>request data with the same key returns <code>409 IDEMPOTENCY_KEY_REUSED</code>.</p>
 <p><strong>Authentication:</strong> Requires an administrator key or tenant-scoped key with</p>
 <p>the <code>counter:create</code> scope.</p>
 <p><strong>Rate Limit:</strong> 10 requests per minute (configurable via RATE_LIMIT_REQUESTS)</p>

@@ -42,6 +42,9 @@ func MultiErrorResponse(errors []ErrorDetail) *ErrorResponse {
 // working while production requests receive the bounded database budget from
 // the middleware layer.
 func requestDatabaseContext(ctx *fasthttp.RequestCtx) context.Context {
+	if transactionContext, ok := ctx.UserValue(idempotencyContextKey{}).(context.Context); ok {
+		return transactionContext
+	}
 	requestContext, _ := middleware.DatabaseContextFromRequest(ctx)
 	return requestctx.WithRequestID(requestContext, middleware.RequestIDFromRequest(ctx))
 }

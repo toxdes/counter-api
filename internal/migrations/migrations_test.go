@@ -10,8 +10,8 @@ func TestEmbeddedMigrationHistoryIsCanonicalAndPaired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("discover migrations: %v", err)
 	}
-	if len(files) != 7 {
-		t.Fatalf("expected seven canonical migrations, got %d", len(files))
+	if len(files) != int(LatestVersion) {
+		t.Fatalf("expected %d canonical migrations, got %d", LatestVersion, len(files))
 	}
 
 	for index, file := range files {
